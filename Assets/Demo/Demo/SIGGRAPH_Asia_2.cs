@@ -16,6 +16,10 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 	public bool ShowInteraction = true;
 	public bool ShowGUI = true;
 
+	public float CylinderSize = 4f;
+	public int CylinderResolution = 9;
+	public int CylinderLayers = 9;
+
 	private Controller Controller;
 	private TimeSeries TimeSeries;
 	private TimeSeries.Root RootSeries;
@@ -52,6 +56,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 
 	protected override void Setup() {
 		Controller = new Controller();
+		/*
 		Controller.Signal idle = Controller.AddSignal("Idle");
 		idle.Default = true;
 		idle.Velocity = 0f;
@@ -64,6 +69,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		idle.AddKey(KeyCode.V, true);
 		idle.UserControl = 0.25f;
 		idle.NetworkControl = 0.1f;
+		*/
 
 		Controller.Signal walk = Controller.AddSignal("Walk");
 		walk.AddKey(KeyCode.W, true);
@@ -78,6 +84,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		walk.UserControl = 0.25f;
 		walk.NetworkControl = 0.25f;
 
+		/*
 		Controller.Signal run = Controller.AddSignal("Run");
 		run.AddKey(KeyCode.LeftShift, true);
 		run.Velocity = 3f;
@@ -101,13 +108,15 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		sit.Velocity = 0f;
 		sit.UserControl = 0.25f;
 		sit.NetworkControl = 0f;
+		*/
 
-		Environment = new CylinderMap(4f, 9, 9, true);
+		Environment = new CylinderMap(CylinderSize, CylinderResolution, CylinderLayers, true);
 		Geometry = new CuboidMap(new Vector3Int(8, 8, 8));
 
 		TimeSeries = new TimeSeries(6, 6, 1f, 1f, 5);
 		RootSeries = new TimeSeries.Root(TimeSeries);
-		StyleSeries = new TimeSeries.Style(TimeSeries, "Idle", "Walk", "Run", "Carry", "Open", "Sit", "Climb");
+		//StyleSeries = new TimeSeries.Style(TimeSeries, "Idle", "Walk", "Run", "Carry", "Open", "Sit", "Climb");
+		StyleSeries = new TimeSeries.Style(TimeSeries, "Walk","Climb");
 		GoalSeries = new TimeSeries.Goal(TimeSeries, Controller.GetSignalNames());
 		ContactSeries = new TimeSeries.Contact(TimeSeries, "Hips", "RightWrist", "LeftWrist", "RightAnkle", "LeftAnkle");
 		PhaseSeries = new TimeSeries.Phase(TimeSeries);
@@ -147,11 +156,11 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		if(IsInteracting) {
 			//Do nothing because coroutines have control.
 		} else if(Controller.QuerySignal("Sit")) {
-			StartCoroutine(Sit());
+			//StartCoroutine(Sit());
 		} else if(Controller.QuerySignal("Carry")) {
-			StartCoroutine(Carry());
+			//StartCoroutine(Carry());
 		} else if(Controller.QuerySignal("Open")) {
-			StartCoroutine(Open());
+			//StartCoroutine(Open());
 		} else {
 			Default();
 		}
@@ -356,6 +365,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		Geometry.Sense(RootSeries.Transformations[TimeSeries.Pivot], LayerMask.GetMask("Interaction"), Vector3.zero, InteractionSmoothing);
 	}
 
+	/*
 	private IEnumerator Sit() {
 		Controller.Signal signal = Controller.GetSignal("Sit");
 		Interaction interaction = Controller.ProjectionInteraction != null ? Controller.ProjectionInteraction : Controller.GetClosestInteraction(transform);
@@ -386,7 +396,9 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 			Controller.ActiveInteraction = null;
 		}
 	}
+	*/
 
+	/*
 	private IEnumerator Open() {
 		Controller.Signal signal = Controller.GetSignal("Open");
 		Interaction interaction = Controller.ProjectionInteraction != null ? Controller.ProjectionInteraction : Controller.GetClosestInteraction(transform);
@@ -404,7 +416,9 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 			Controller.ActiveInteraction = null;
 		}
 	}
+	*/
 
+	/*
 	private IEnumerator Carry() {
 		Controller.Signal signal = Controller.GetSignal("Carry");
 		Interaction interaction = Controller.ProjectionInteraction != null ? Controller.ProjectionInteraction : Controller.GetClosestInteraction(transform);
@@ -563,6 +577,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 			Controller.ActiveInteraction = null;
 		}
 	}
+	*/
 
     protected override void Postprocess() {
 		Matrix4x4 rightFoot = Actor.GetBoneTransformation(ContactSeries.Bones[3]);
@@ -636,17 +651,17 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		/*
 		Transform rightToe = Actor.FindBone("RightToe").Transform;
 		Vector3 rightPos = rightToe.transform.position;
-		float rightPosHeight = Utility.GetHeight(rightPos, LayerMask.GetMask("Ground"));//Added
-		//rightPos.y = Mathf.Max(rightPos.y, 0.02f);
+		//float rightPosHeight = Utility.GetHeight(rightPos, LayerMask.GetMask("Ground"));//Added
+		rightPos.y = Mathf.Max(rightPos.y, 0.02f);
 		//spine.position = new Vector3(spinePosition.x, spineHeight + (spinePosition.y - transform.position.y), spinePosition.z);
-		rightPos.y += rightPosHeight;
+		//rightPos.y += rightPosHeight;
 		rightToe.position = rightPos;
 
 		Transform leftToe = Actor.FindBone("LeftToe").Transform;
 		Vector3 leftPos = leftToe.transform.position;
-		float leftPosHeight = Utility.GetHeight(leftPos, LayerMask.GetMask("Ground"));//Added
-		//leftPos.y = Mathf.Max(leftPos.y, 0.02f);
-		leftPos.y += leftPosHeight;
+		//float leftPosHeight = Utility.GetHeight(leftPos, LayerMask.GetMask("Ground"));//Added
+		leftPos.y = Mathf.Max(leftPos.y, 0.02f);
+		//leftPos.y += leftPosHeight;
 		leftToe.position = leftPos;
 		*/
     }
