@@ -809,7 +809,7 @@ public class MotionExporter : EditorWindow {
 			ContactSeries = (TimeSeries.Contact)TimeSeries.GetSeries("Contact");
 			PhaseSeries = (TimeSeries.Phase)TimeSeries.GetSeries("Phase");
 
-			Environment = ((CylinderMapModule)editor.GetData().GetModule(Module.ID.CylinderMap)).GetCylinderMap(Frame, editor.Mirror);
+			Environment = ((CylinderMapModule)editor.GetData().GetModule(Module.ID.CylinderMap)).GetCylinderMap(editor, Frame, editor.Mirror);
 			Interaction = ((GoalModule)editor.GetData().GetModule(Module.ID.Goal)).Target.GetInteractionGeometry(Frame, editor.Mirror, 1f/editor.TargetFramerate);
 		}
 	}

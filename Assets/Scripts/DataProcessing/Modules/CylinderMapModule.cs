@@ -36,7 +36,7 @@ public class CylinderMapModule : Module {
 		
 	}
 
-	public CylinderMap GetCylinderMap(Frame frame, bool mirrored) {
+	public CylinderMap GetCylinderMap(MotionEditor editor, Frame frame, bool mirrored) {
 		CylinderMap sensor = new CylinderMap(Size, Resolution, Layers, Overlap);
 		RootModule module = (RootModule)Data.GetModule(ID.Root);
 		if(module != null) {
@@ -45,14 +45,14 @@ public class CylinderMapModule : Module {
 			if(HeightOffset == 0f){
 				sensor.Sense(Matrix4x4.TRS(position + new Vector3(0f, 0f, 0f), rotation, Vector3.one), Mask);
 			} else{
-				sensor.Sense(Matrix4x4.TRS(position + new Vector3(0f, 0f, 0f), rotation, Vector3.one), Mask, HeightOffset);
+				sensor.Sense(editor, Matrix4x4.TRS(position + new Vector3(0f, 0f, 0f), rotation, Vector3.one), Mask, HeightOffset);
 			}
 			
 		} else {
 			if(HeightOffset == 0f){
 				sensor.Sense(frame.GetBoneTransformation(0, mirrored), Mask);
 			} else{
-				sensor.Sense(frame.GetBoneTransformation(0, mirrored), Mask, HeightOffset);
+				sensor.Sense(editor, frame.GetBoneTransformation(0, mirrored), Mask, HeightOffset);
 			}
 		}
 		Samples = sensor.Points.Length;
@@ -60,11 +60,11 @@ public class CylinderMapModule : Module {
 	}
 
 	protected override void DerivedDraw(MotionEditor editor) {
-		CylinderMap sensor = GetCylinderMap(editor.GetCurrentFrame(), editor.Mirror);
+		CylinderMap sensor = GetCylinderMap(editor, editor.GetCurrentFrame(), editor.Mirror);
 		if(HeightOffset == 0f){
 			sensor.Draw(Color, DrawReferences, DrawDistribution);
 		} else{
-			sensor.Draw(Color, HeightOffset, DrawReferences, DrawDistribution);
+			sensor.Draw(editor, Color, HeightOffset, DrawReferences, DrawDistribution);
 		}
 		
 	}

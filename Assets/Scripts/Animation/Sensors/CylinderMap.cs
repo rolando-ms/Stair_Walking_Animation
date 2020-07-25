@@ -94,10 +94,14 @@ public class CylinderMap {
 		}
 	}
 
-	public void Sense(Matrix4x4 pivot, LayerMask mask, float heightOffset) {
+	public void Sense(MotionEditor editor, Matrix4x4 pivot, LayerMask mask, float heightOffset) {
+		Actor actor = editor.GetActor();
+		Transform rootTransform = actor.GetRoot();
+		Vector3 rootTransformPos = rootTransform.transform.position;
+		float rootPosHeight = Utility.GetHeight(rootTransformPos, LayerMask.GetMask("Interaction"));
 		Pivot = pivot;
 		Vector3 position = Pivot.GetPosition();
-		position.y += heightOffset;
+		position.y += heightOffset + rootPosHeight;
 		Quaternion rotation = Pivot.GetRotation();
 		for(int i=0; i<Points.Length; i++) {
 			References[i] = position + rotation * Points[i];
@@ -140,13 +144,16 @@ public class CylinderMap {
 		UltiDraw.End();
 	}
 
-	public void Draw(Color color, float heightOffset, bool references=false, bool distribution=false) {
+	public void Draw(MotionEditor editor, Color color, float heightOffset, bool references=false, bool distribution=false) {
 		if(Size == 0f) {
 			return;
 		}
-
+		Actor actor = editor.GetActor();
+		Transform rootTransform = actor.GetRoot();
+		Vector3 rootTransformPos = rootTransform.transform.position;
+		float rootPosHeight = Utility.GetHeight(rootTransformPos, LayerMask.GetMask("Interaction"));
 		Vector3 position = Pivot.GetPosition();
-		position.y += heightOffset;
+		position.y += heightOffset + rootPosHeight;
 		Quaternion rotation = Pivot.GetRotation();
 
 		float height = GetHeight();
