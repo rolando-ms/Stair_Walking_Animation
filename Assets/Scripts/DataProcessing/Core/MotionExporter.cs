@@ -649,10 +649,10 @@ public class MotionExporter : EditorWindow {
 									X.Feed(current.Environment.Occupancies, "Environment-");
 
 									//Interaction Geometry
-									for(int k=0; k<current.Interaction.Points.Length; k++) {
+									/*for(int k=0; k<current.Interaction.Points.Length; k++) {
 										X.Feed(current.Interaction.References[k].GetRelativePositionTo(current.Root), "InteractionPosition"+(k+1));
 										X.Feed(current.Interaction.Occupancies[k], "InteractionOccupancy"+(k+1));
-									}
+									}*/
 
 									//Gating Variables
 									X.Feed(GenerateGatingInteractionSIGGRAPHAsia(current), "Gating-");
@@ -811,7 +811,7 @@ public class MotionExporter : EditorWindow {
 			PhaseSeries = (TimeSeries.Phase)TimeSeries.GetSeries("Phase");
 
 			Environment = ((CylinderMapModule)editor.GetData().GetModule(Module.ID.CylinderMap)).GetCylinderMap(editor, Frame, editor.Mirror);
-			Interaction = ((GoalModule)editor.GetData().GetModule(Module.ID.Goal)).Target.GetInteractionGeometry(Frame, editor.Mirror, 1f/editor.TargetFramerate);
+			//Interaction = ((GoalModule)editor.GetData().GetModule(Module.ID.Goal)).Target.GetInteractionGeometry(Frame, editor.Mirror, 1f/editor.TargetFramerate);
 		}
 	}
 

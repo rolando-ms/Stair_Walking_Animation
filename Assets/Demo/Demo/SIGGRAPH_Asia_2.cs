@@ -130,8 +130,8 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 			}
 			GoalSeries.Transformations[i] = transform.GetWorldMatrix(true);
 			PhaseSeries.Values[i] = Mathf.Repeat((float)i/GetFramerate(), 1f);
-			Geometry.Pivot = transform.GetWorldMatrix(true);
-			Geometry.References[i] = transform.position;
+			//Geometry.Pivot = transform.GetWorldMatrix(true);
+			//Geometry.References[i] = transform.position;
 		}
 
 		PosePrediction = new Vector3[Actor.Bones.Length];
@@ -194,10 +194,10 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		NeuralNetwork.Feed(Environment.Occupancies);
 
 		//Input Geometry
-		for(int i=0; i<Geometry.Points.Length; i++) {
+		/*for(int i=0; i<Geometry.Points.Length; i++) {
 			NeuralNetwork.Feed(Geometry.References[i].GetRelativePositionTo(root));
 			NeuralNetwork.Feed(Geometry.Occupancies[i]);
-		}
+		}*/
 
 		//Setup Gating Features
 		NeuralNetwork.Feed(GenerateGating());
@@ -361,8 +361,9 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 				Signals
 			);
 		}
-		Geometry.Setup(Geometry.Resolution);
+		/*Geometry.Setup(Geometry.Resolution);
 		Geometry.Sense(RootSeries.Transformations[TimeSeries.Pivot], LayerMask.GetMask("Interaction"), Vector3.zero, InteractionSmoothing);
+		*/
 	}
 
 	/*
