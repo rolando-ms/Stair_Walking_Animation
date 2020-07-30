@@ -696,7 +696,8 @@ public class MotionExporter : EditorWindow {
 									}
 
 									//Key Contacts
-									Y.Feed(next.ContactSeries.GetContacts(next.TimeSeries.Pivot, "Hips", "RightWrist", "LeftWrist", "RightAnkle", "LeftAnkle"), "Contact-");
+									//Y.Feed(next.ContactSeries.GetContacts(next.TimeSeries.Pivot, "Hips", "RightWrist", "LeftWrist", "RightAnkle", "LeftAnkle"), "Contact-");
+									Y.Feed(next.ContactSeries.GetContacts(next.TimeSeries.Pivot, "RightAnkle", "LeftAnkle"), "Contact-");
 
 									//Phase Update
 									List<float> values = new List<float>();
