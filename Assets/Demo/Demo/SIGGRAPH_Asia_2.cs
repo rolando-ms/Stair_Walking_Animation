@@ -17,8 +17,8 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 	public bool ShowGUI = true;
 
 	public float CylinderSize = 4f;
-	public int CylinderResolution = 9;
-	public int CylinderLayers = 9;
+	public int CylinderResolution = 8;
+	public int CylinderLayers = 8;
 
 	private Controller Controller;
 	private TimeSeries TimeSeries;
@@ -56,7 +56,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 
 	protected override void Setup() {
 		Controller = new Controller();
-		/*
+		
 		Controller.Signal idle = Controller.AddSignal("Idle");
 		idle.Default = true;
 		idle.Velocity = 0f;
@@ -69,7 +69,6 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		idle.AddKey(KeyCode.V, true);
 		idle.UserControl = 0.25f;
 		idle.NetworkControl = 0.1f;
-		*/
 
 		Controller.Signal walk = Controller.AddSignal("Walk");
 		walk.AddKey(KeyCode.W, true);
@@ -116,9 +115,10 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		TimeSeries = new TimeSeries(6, 6, 1f, 1f, 5);
 		RootSeries = new TimeSeries.Root(TimeSeries);
 		//StyleSeries = new TimeSeries.Style(TimeSeries, "Idle", "Walk", "Run", "Carry", "Open", "Sit", "Climb");
-		StyleSeries = new TimeSeries.Style(TimeSeries, "Walk","Climb");
+		StyleSeries = new TimeSeries.Style(TimeSeries, "Idle","Walk","Climb");
 		GoalSeries = new TimeSeries.Goal(TimeSeries, Controller.GetSignalNames());
-		ContactSeries = new TimeSeries.Contact(TimeSeries, "Hips", "RightWrist", "LeftWrist", "RightAnkle", "LeftAnkle");
+		ContactSeries = new TimeSeries.Contact(TimeSeries, "RightAnkle", "LeftAnkle");
+		//ContactSeries = new TimeSeries.Contact(TimeSeries, "Hips", "RightWrist", "LeftWrist", "RightAnkle", "LeftAnkle");
 		PhaseSeries = new TimeSeries.Phase(TimeSeries);
 		for(int i=0; i<TimeSeries.Samples.Length; i++) {
 			RootSeries.Transformations[i] = transform.GetWorldMatrix(true);
@@ -137,8 +137,8 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		PosePrediction = new Vector3[Actor.Bones.Length];
 		RootPrediction = new Matrix4x4[7];
 		GoalPrediction = new Matrix4x4[7];
-		RightFootIK = UltimateIK.BuildModel(Actor.FindTransform("RightHip"), Actor.GetBoneTransforms(ContactSeries.Bones[3]));
-		LeftFootIK = UltimateIK.BuildModel(Actor.FindTransform("LeftHip"), Actor.GetBoneTransforms(ContactSeries.Bones[4]));
+		RightFootIK = UltimateIK.BuildModel(Actor.FindTransform("RightHip"), Actor.GetBoneTransforms(ContactSeries.Bones[0]));
+		LeftFootIK = UltimateIK.BuildModel(Actor.FindTransform("LeftHip"), Actor.GetBoneTransforms(ContactSeries.Bones[1]));
 		//ActorIK = UltimateIK.BuildModel(ActorIK, Actor.Bones[0].Transform, contactModule.GetObjectives(Actor));
 	}
 
@@ -580,11 +580,11 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 	*/
 
     protected override void Postprocess() {
-		Matrix4x4 rightFoot = Actor.GetBoneTransformation(ContactSeries.Bones[3]);
-		Matrix4x4 leftFoot = Actor.GetBoneTransformation(ContactSeries.Bones[4]);
-		RightFootIK.Objectives[0].SetTarget(rightFoot.GetPosition(), 1f-ContactSeries.Values[TimeSeries.Pivot][3]);
+		Matrix4x4 rightFoot = Actor.GetBoneTransformation(ContactSeries.Bones[0]);
+		Matrix4x4 leftFoot = Actor.GetBoneTransformation(ContactSeries.Bones[1]);
+		RightFootIK.Objectives[0].SetTarget(rightFoot.GetPosition(), 1f-ContactSeries.Values[TimeSeries.Pivot][0]);
 		RightFootIK.Objectives[0].SetTarget(rightFoot.GetRotation());
-		LeftFootIK.Objectives[0].SetTarget(leftFoot.GetPosition(), 1f-ContactSeries.Values[TimeSeries.Pivot][4]);
+		LeftFootIK.Objectives[0].SetTarget(leftFoot.GetPosition(), 1f-ContactSeries.Values[TimeSeries.Pivot][1]);
 		LeftFootIK.Objectives[0].SetTarget(leftFoot.GetRotation());
 		RightFootIK.Solve();
 		LeftFootIK.Solve();
