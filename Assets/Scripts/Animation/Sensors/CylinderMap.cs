@@ -94,6 +94,26 @@ public class CylinderMap {
 		}
 	}
 
+	public void Sense(Actor actor, Matrix4x4 pivot, LayerMask mask, float heightOffset) {
+		Transform rootTransform = actor.GetRoot();
+		Vector3 rootTransformPos = rootTransform.transform.position;
+		float rootPosHeight = Utility.GetHeight(rootTransformPos, LayerMask.GetMask("Interaction"));
+		Pivot = pivot;
+		Vector3 position = Pivot.GetPosition();
+		position.y += heightOffset + rootPosHeight;
+		Quaternion rotation = Pivot.GetRotation();
+		for(int i=0; i<Points.Length; i++) {
+			References[i] = position + rotation * Points[i];
+			if(Size == 0f) {
+				Occupancies[i] = 0f;
+			} else {
+				Collider c;
+				Vector3 closest = Utility.GetClosestPointOverlapSphere(References[i], Radius[i], mask, out c);
+				Occupancies[i] = c == null ? 0f : 1f - Vector3.Distance(References[i], closest) / Radius[i];
+			}
+		}
+	}
+
 	public void Sense(MotionEditor editor, Matrix4x4 pivot, LayerMask mask, float heightOffset) {
 		Actor actor = editor.GetActor();
 		Transform rootTransform = actor.GetRoot();

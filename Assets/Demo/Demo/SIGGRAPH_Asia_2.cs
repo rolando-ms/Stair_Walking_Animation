@@ -19,6 +19,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 	public float CylinderSize = 4f;
 	public int CylinderResolution = 8;
 	public int CylinderLayers = 8;
+	public float HeightOffset = 0f;
 
 	private Controller Controller;
 	private TimeSeries TimeSeries;
@@ -190,7 +191,8 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		}
 
 		//Input Environment
-		Environment.Sense(root, LayerMask.GetMask("Default", "Interaction"));
+		//Environment.Sense(root, LayerMask.GetMask("Default", "Interaction"));
+		Environment.Sense(Actor, root, LayerMask.GetMask("Default", "Interaction"), HeightOffset);
 		NeuralNetwork.Feed(Environment.Occupancies);
 
 		//Input Geometry
