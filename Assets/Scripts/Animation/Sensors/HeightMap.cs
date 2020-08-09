@@ -81,11 +81,13 @@ public class HeightMap {
 		//return;
 		UltiDraw.Begin();
 
-		//Quaternion rotation = Pivot.GetRotation() * Quaternion.Euler(90f, 0f, 0f);
+		Quaternion rotation = Pivot.GetRotation() * Quaternion.Euler(90f, 0f, 0f);
 		Color color = UltiDraw.IndianRed.Transparent(0.5f);
+		//Quaternion rotation = new Quaternion(1,1,1,1);
 		//float area = (float)Size/(float)(Resolution-1);
 		for(int i=0; i<Points.Length; i++) {
-			UltiDraw.DrawCircle(Points[i], 0.025f, color);
+			//UltiDraw.DrawCircle(Points[i], 0.025f, color);
+			UltiDraw.DrawSphere(Points[i], rotation, 0.05f, color);
 			//UltiDraw.DrawQuad(Points[i], rotation, area, area, color);
 		}
 
