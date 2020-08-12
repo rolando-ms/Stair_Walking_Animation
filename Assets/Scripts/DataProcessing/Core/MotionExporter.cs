@@ -34,6 +34,8 @@ public class MotionExporter : EditorWindow {
 	public bool WriteMirror = true;
 	public bool LoadActiveOnly = true;
 
+	public bool UseHeightMap = false;
+
 	private int Start = 0;
 	private int End = 0;
 
@@ -90,6 +92,7 @@ public class MotionExporter : EditorWindow {
 					BatchSize = Mathf.Max(1, EditorGUILayout.IntField("Batch Size", BatchSize));
 					WriteMirror = EditorGUILayout.Toggle("Write Mirror", WriteMirror);
 					LoadActiveOnly = EditorGUILayout.Toggle("Load Active Only", LoadActiveOnly);
+					UseHeightMap = EditorGUILayout.Toggle("Use Height Map", UseHeightMap);
 
 					Utility.SetGUIColor(UltiDraw.White);
 					using(new EditorGUILayout.VerticalScope ("Box")) {
@@ -645,8 +648,16 @@ public class MotionExporter : EditorWindow {
 										}
 									}
 
-									//Environment Geometry
-									X.Feed(current.Environment.Occupancies, "Environment-");
+
+									if(UseHeightMap){
+										//Height map
+										for(int k=0; k<current.EnvironmentMap.Points.Length; k++) {
+											X.Feed(current.EnvironmentMap.Points[k], "HeightMapPoint"+(k+1));
+										}
+									}else{
+										//Environment Geometry
+										X.Feed(current.Environment.Occupancies, "Environment-");
+									}
 
 									//Interaction Geometry
 									/*for(int k=0; k<current.Interaction.Points.Length; k++) {
@@ -795,6 +806,7 @@ public class MotionExporter : EditorWindow {
 		public TimeSeries.Phase PhaseSeries;
 		public CylinderMap Environment;
 		public CuboidMap Interaction;
+		public HeightMap EnvironmentMap;
 
 		public InputSIGGRAPHAsia(MotionEditor editor, float timestamp) {
 			editor.LoadFrame(timestamp);
@@ -811,6 +823,7 @@ public class MotionExporter : EditorWindow {
 			PhaseSeries = (TimeSeries.Phase)TimeSeries.GetSeries("Phase");
 
 			Environment = ((CylinderMapModule)editor.GetData().GetModule(Module.ID.CylinderMap)).GetCylinderMap(editor, Frame, editor.Mirror);
+			EnvironmentMap = ((HeightMapModule)editor.GetData().GetModule(Module.ID.HeightMap)).GetHeightMap(editor.GetActor());
 			//Interaction = ((GoalModule)editor.GetData().GetModule(Module.ID.Goal)).Target.GetInteractionGeometry(Frame, editor.Mirror, 1f/editor.TargetFramerate);
 		}
 	}

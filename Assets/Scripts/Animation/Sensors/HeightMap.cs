@@ -71,6 +71,7 @@ public class HeightMap {
 	}
 
 	private Vector3 Project(Vector3 position) {
+		//Vector3.Distance()
 		RaycastHit hit;
 		Physics.Raycast(new Vector3(position.x, 100f, position.z), Vector3.down, out hit, float.PositiveInfinity, Mask);
 		position = hit.point;

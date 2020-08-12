@@ -10,6 +10,7 @@ public class HeightMapModule : Module {
 	public float Size = 1f;
 	public int Resolution = 25;
 	public LayerMask Mask = -1;
+	private int Samples = 0;
 
 	public override ID GetID() {
 		return ID.HeightMap;
@@ -31,6 +32,7 @@ public class HeightMapModule : Module {
 	public HeightMap GetHeightMap(Actor actor) {
 		HeightMap sensor = new HeightMap(Size, Resolution, Mask);
 		sensor.Sense(actor.GetRoot().GetWorldMatrix());
+		Samples = sensor.Points.Length;
 		return sensor;
 	}
 
@@ -44,6 +46,7 @@ public class HeightMapModule : Module {
 		Size = EditorGUILayout.FloatField("Size", Size);
 		Resolution = EditorGUILayout.IntField("Resolution", Resolution);
 		Mask = InternalEditorUtility.ConcatenatedLayersMaskToLayerMask(EditorGUILayout.MaskField("Mask", InternalEditorUtility.LayerMaskToConcatenatedLayersMask(Mask), InternalEditorUtility.layers));
+		EditorGUILayout.LabelField("Samples: " + Samples);
 	}
 
 }

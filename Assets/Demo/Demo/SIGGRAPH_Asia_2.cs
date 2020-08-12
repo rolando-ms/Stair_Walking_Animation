@@ -13,13 +13,18 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 	public bool ShowPhase = false;
 	public bool ShowContacts = false;
 	public bool ShowEnvironment = true;
-	public bool ShowInteraction = true;
+	public bool ShowInteraction = false;
+	public bool ShowHeightMap = true;
 	public bool ShowGUI = true;
 
 	public float CylinderSize = 4f;
 	public int CylinderResolution = 8;
 	public int CylinderLayers = 8;
 	public float HeightOffset = 0f;
+
+	public bool UseHeightMap = false;
+	public int HeightMapSize = 3;
+	public int HeightMapResolution = 20;
 
 	private Controller Controller;
 	private TimeSeries TimeSeries;
@@ -30,6 +35,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 	private TimeSeries.Phase PhaseSeries;
 	private CylinderMap Environment;
 	private CuboidMap Geometry;
+	private HeightMap EnvironmentHeight;
 
 	private ContactModule contactModule;
 
@@ -112,6 +118,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 
 		Environment = new CylinderMap(CylinderSize, CylinderResolution, CylinderLayers, true);
 		Geometry = new CuboidMap(new Vector3Int(8, 8, 8));
+		EnvironmentHeight = new HeightMap(HeightMapSize, HeightMapResolution, LayerMask.GetMask("Ground","Interaction","Default"));
 
 		TimeSeries = new TimeSeries(6, 6, 1f, 1f, 5);
 		RootSeries = new TimeSeries.Root(TimeSeries);
@@ -190,10 +197,17 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 			NeuralNetwork.Feed(GoalSeries.Values[sample.Index]);
 		}
 
-		//Input Environment
-		//Environment.Sense(root, LayerMask.GetMask("Default", "Interaction"));
-		Environment.Sense(Actor, root, LayerMask.GetMask("Default", "Interaction"), HeightOffset);
-		NeuralNetwork.Feed(Environment.Occupancies);
+		if(UseHeightMap){
+			for(int i=0; i<EnvironmentHeight.Points.Length; i++) {
+				EnvironmentHeight.Sense(root);
+				NeuralNetwork.Feed(EnvironmentHeight.Points[i].GetRelativePositionTo(root));
+			}
+		}else{
+			//Input Environment
+			//Environment.Sense(root, LayerMask.GetMask("Default", "Interaction"));
+			Environment.Sense(Actor, root, LayerMask.GetMask("Default", "Interaction"), HeightOffset);
+			NeuralNetwork.Feed(Environment.Occupancies);
+		}
 
 		//Input Geometry
 		/*for(int i=0; i<Geometry.Points.Length; i++) {
@@ -710,6 +724,9 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		}
 		if(ShowInteraction) {
 			Geometry.Draw(UltiDraw.Cyan.Transparent(0.25f));
+		}
+		if(ShowHeightMap){
+			EnvironmentHeight.Draw();
 		}
 
 		if(ShowBiDirectional) {
