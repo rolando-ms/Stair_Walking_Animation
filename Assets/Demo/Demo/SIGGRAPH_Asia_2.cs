@@ -283,14 +283,14 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		for(int i=TimeSeries.PivotKey; i<TimeSeries.KeyCount; i++) {
 			TimeSeries.Sample sample = TimeSeries.GetKey(i);
 			Matrix4x4 goal = GoalSeries.Transformations[TimeSeries.Pivot];
-			goal[1,3] = 0f;
+			//goal[1,3] = 0f;
 			Vector3 pos = NeuralNetwork.ReadXZ().GetRelativePositionFrom(goal);
 			Vector3 dir = NeuralNetwork.ReadXZ().normalized.GetRelativeDirectionFrom(goal);
 			if(i > TimeSeries.PivotKey) {
 				Matrix4x4 pivot = RootSeries.Transformations[sample.Index];
-				pivot[1,3] = 0f;
+				//pivot[1,3] = 0f;
 				Matrix4x4 reference = GoalSeries.Transformations[sample.Index];
-				reference[1,3] = 0f;
+				//reference[1,3] = 0f;
 				float distance = Vector3.Distance(pivot.GetPosition(), reference.GetPosition());
 				float weight = Mathf.Pow((float)(i-6)/7f, distance*distance);
 
