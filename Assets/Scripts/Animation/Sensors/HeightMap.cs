@@ -14,11 +14,36 @@ public class HeightMap {
 	public int Resolution = 25;
 	public LayerMask Mask = -1;
 
+	public float Width = 1;
+	public float Length = 1;
+	public int WidthResolution = 10;
+	public int LengthResolution = 10;
+
 	public HeightMap(float size, int resolution, LayerMask mask) {
 		Size = size;
 		Resolution = resolution;
 		Mask = mask;
-		Generate();
+		GenerateArc();
+	}
+
+	public HeightMap(float width, float length, int widthResolution, int lengthResolution, LayerMask mask) {
+		Width = width;
+		Length = length;
+		WidthResolution = widthResolution;
+		LengthResolution = lengthResolution;
+		Mask = mask;
+		GenerateRectangular();
+	}
+
+	public HeightMap(float size, int resolution, LayerMask mask, bool circular) {
+		Size = size;
+		Resolution = resolution;
+		Mask = mask;
+		if(circular){
+			GenerateCircular();
+		}else{
+			Generate();
+		}
 	}
 
 	private void Generate() {
@@ -30,6 +55,84 @@ public class HeightMap {
 			}
 		}
 	}
+
+	private void GenerateRectangular() {
+		Map = new Vector3[WidthResolution*LengthResolution];
+		Points = new Vector3[WidthResolution*LengthResolution];
+		for(int x=0; x<LengthResolution; x++) {
+			for(int y=0; y<WidthResolution; y++) {
+				Map[y*LengthResolution + x] = new Vector3(-Length/2f + (float)x/(float)(LengthResolution-1)*Length, 0f,(float)y/(float)(WidthResolution-1)*Width);
+			}
+		}
+	}
+
+	private void GenerateCircular() {
+		float diameter = GetDiameter();
+		List<Vector3> map = new List<Vector3>();
+		//List<Vector3> points = new List<Vector3>();
+		//List<float> radius = new List<float>();
+		for(int y=0; y<Resolution; y++) {
+			float coverage = 0.5f * diameter;
+			float distance = (float)y * coverage;
+			float arc = 2f * Mathf.PI * distance;
+			int count = Mathf.RoundToInt(arc / coverage);
+			for(int x=0; x<count; x++) {
+				float degrees = (float)x/(float)count*360f;
+				map.Add(
+					new Vector3(
+					distance*Mathf.Cos(Mathf.Deg2Rad*degrees),
+					0f,
+					distance*Mathf.Sin(Mathf.Deg2Rad*degrees)
+					)
+				);
+				/*if(Overlap) {
+					radius.Add(0.5f*Mathf.Sqrt(2f)*coverage);
+				} else {
+					radius.Add(0.5f*coverage);
+				}*/
+			}
+		}
+		Map = map.ToArray();
+		Points = new Vector3[map.Count];
+		/*Radius = radius.ToArray();
+		References = new Vector3[Points.Length];
+		
+		Occupancies = new float[Points.Length];*/
+	}
+
+	private void GenerateArc() {
+		float diameter = GetDiameter();
+		List<Vector3> map = new List<Vector3>();
+		//List<Vector3> points = new List<Vector3>();
+		//List<float> radius = new List<float>();
+		for(int y=0; y<Resolution; y++) {
+			float coverage = 0.5f * diameter;
+			float distance = (float)y * coverage;
+			float arc = Mathf.PI * distance;
+			int count = Mathf.RoundToInt(arc / coverage);
+			for(int x=0; x<count; x++) {
+				float degrees = (float)x/(float)count*180f;
+				map.Add(
+					new Vector3(
+					distance*Mathf.Cos(Mathf.Deg2Rad*degrees),
+					0f,
+					distance*Mathf.Sin(Mathf.Deg2Rad*degrees)
+					)
+				);
+				/*if(Overlap) {
+					radius.Add(0.5f*Mathf.Sqrt(2f)*coverage);
+				} else {
+					radius.Add(0.5f*coverage);
+				}*/
+			}
+		}
+		Map = map.ToArray();
+		Points = new Vector3[map.Count];
+		/*Radius = radius.ToArray();
+		References = new Vector3[Points.Length];
+		Occupancies = new float[Points.Length];*/
+	}
+
 
 	public void SetSize(float value) {
 		if(Size != value) {
@@ -68,6 +171,10 @@ public class HeightMap {
 			heights[i] = Mathf.Clamp(Points[i].y, 0f, maxHeight);
 		}
 		return heights;
+	}
+
+	private float GetDiameter() {
+		return Size / (float)(Resolution-1);
 	}
 
 	private Vector3 Project(Vector3 position) {

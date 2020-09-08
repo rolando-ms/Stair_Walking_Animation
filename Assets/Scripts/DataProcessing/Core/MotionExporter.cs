@@ -652,15 +652,15 @@ public class MotionExporter : EditorWindow {
 									if(UseHeightMap){
 										//Height map
 										for(int k=0; k<current.EnvironmentMap.Points.Length; k++) {
-											X.Feed(current.EnvironmentMap.Points[k], "HeightMapPoint"+(k+1));
+											X.Feed(current.EnvironmentMap.Points[k].GetRelativePositionTo(current.Root), "HeightMapPoint"+(k+1));
 										}
 									}else{
 										//Environment Geometry
 										X.Feed(current.Environment.Occupancies, "Environment-");
 									}
 
-									//Interaction Geometry
-									/*for(int k=0; k<current.Interaction.Points.Length; k++) {
+									/*//Interaction Geometry
+									for(int k=0; k<current.Interaction.Points.Length; k++) {
 										X.Feed(current.Interaction.References[k].GetRelativePositionTo(current.Root), "InteractionPosition"+(k+1));
 										X.Feed(current.Interaction.Occupancies[k], "InteractionOccupancy"+(k+1));
 									}*/
@@ -708,7 +708,7 @@ public class MotionExporter : EditorWindow {
 
 									//Key Contacts
 									//Y.Feed(next.ContactSeries.GetContacts(next.TimeSeries.Pivot, "Hips", "RightWrist", "LeftWrist", "RightAnkle", "LeftAnkle"), "Contact-");
-									Y.Feed(next.ContactSeries.GetContacts(next.TimeSeries.Pivot, "RightAnkle", "LeftAnkle"), "Contact-");
+									Y.Feed(next.ContactSeries.GetContacts(next.TimeSeries.Pivot, "RightAnkle", "LeftAnkle", "RightWrist", "LeftWrist"), "Contact-");
 
 									//Phase Update
 									List<float> values = new List<float>();

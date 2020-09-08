@@ -123,9 +123,9 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		TimeSeries = new TimeSeries(6, 6, 1f, 1f, 5);
 		RootSeries = new TimeSeries.Root(TimeSeries);
 		//StyleSeries = new TimeSeries.Style(TimeSeries, "Idle", "Walk", "Run", "Carry", "Open", "Sit", "Climb");
-		StyleSeries = new TimeSeries.Style(TimeSeries, "Idle","Walk","Climb");
+		StyleSeries = new TimeSeries.Style(TimeSeries, "Idle","Walk","Ascend","Descend");
 		GoalSeries = new TimeSeries.Goal(TimeSeries, Controller.GetSignalNames());
-		ContactSeries = new TimeSeries.Contact(TimeSeries, "RightAnkle", "LeftAnkle");
+		ContactSeries = new TimeSeries.Contact(TimeSeries, "RightAnkle", "LeftAnkle","RightWrist","LeftWrist");
 		//ContactSeries = new TimeSeries.Contact(TimeSeries, "Hips", "RightWrist", "LeftWrist", "RightAnkle", "LeftAnkle");
 		PhaseSeries = new TimeSeries.Phase(TimeSeries);
 		for(int i=0; i<TimeSeries.Samples.Length; i++) {
@@ -608,7 +608,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		
 		Transform rootTransform = Actor.GetRoot();
 		Vector3 rootTransformPos = rootTransform.transform.position;
-		float rootPosHeight = Utility.GetHeight(rootTransformPos, LayerMask.GetMask("Interaction"));
+		float rootPosHeight = Utility.GetHeight(rootTransformPos, LayerMask.GetMask("Ground"));
 		//Debug.Log("Root Pos = " + rootPosHeight);
 
 		/*
@@ -643,7 +643,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		//rightPos.y = Mathf.Max(rightPos.y, 0.02f);
 		//spine.position = new Vector3(spinePosition.x, spineHeight + (spinePosition.y - transform.position.y), spinePosition.z);
 		if (rightAnklePos.y < rootPosHeight){
-			rightAnklePos.y = rootPosHeight;
+			rightAnklePos.y = rootPosHeight + 0.05f;
 		}
 		//rightAnklePos.y += rootPosHeight;
 		rightAnkle.position = rightAnklePos;
@@ -653,7 +653,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		//rightPos.y = Mathf.Max(rightPos.y, 0.02f);
 		//spine.position = new Vector3(spinePosition.x, spineHeight + (spinePosition.y - transform.position.y), spinePosition.z);
 		if (leftAnklePos.y < rootPosHeight){
-			leftAnklePos.y = rootPosHeight;
+			leftAnklePos.y = rootPosHeight + 0.05f;
 		}
 		//leftAnklePos.y += rootPosHeight;
 		leftAnkle.position = leftAnklePos;

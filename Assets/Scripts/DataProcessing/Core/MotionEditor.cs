@@ -37,6 +37,9 @@ public class MotionEditor : MonoBehaviour {
 
 	private int[] BoneMapping = new int[0];
 
+	public float MaxScaleNoiseZ = 1f;
+	public float RandomScaleNoiseZ = 1f;
+
 	[SerializeField] private MotionData Data = null;
 	[SerializeField] private Actor Actor = null;
 
