@@ -198,6 +198,15 @@ public class TimeSeries {
 			return length / TimeSeries.FutureWindow;
 		}
 
+		public void Postprocess(int index) {
+			LayerMask mask = LayerMask.GetMask("Ground");
+			Vector3 position = Transformations[index].GetPosition();
+			Vector3 direction = Transformations[index].GetForward();
+
+			position.y = Utility.GetHeight(Transformations[index].GetPosition(), mask);
+			SetPosition(index, position);
+		}
+
 		public void Draw() {
 			int step = TimeSeries.Resolution;
 			UltiDraw.Begin();
@@ -353,6 +362,15 @@ public class TimeSeries {
 
 		public Vector3 GetDirection(int index) {
 			return Transformations[index].GetForward();
+		}
+
+		public void Postprocess(int index) {
+			LayerMask mask = LayerMask.GetMask("Ground");
+			Vector3 position = Transformations[index].GetPosition();
+			Vector3 direction = Transformations[index].GetForward();
+
+			position.y = Utility.GetHeight(Transformations[index].GetPosition(), mask);
+			SetPosition(index, position);
 		}
 
 		public void Draw() {

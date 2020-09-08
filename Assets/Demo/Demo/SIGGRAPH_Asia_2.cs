@@ -153,6 +153,12 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
     protected override void Feed() {
 		Controller.Update();
 
+		//Updating height w.r.t. ground
+		for(int i=0; i<TimeSeries.Samples.Length; i++){
+			RootSeries.Postprocess(i);
+		}
+		//RootSeries.Postprocess(TimeSeries.Pivot);
+
 		//Get Root
 		Matrix4x4 root = RootSeries.Transformations[TimeSeries.Pivot];
 
@@ -192,6 +198,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		//Input Goals
 		for(int i=0; i<TimeSeries.KeyCount; i++) {
 			TimeSeries.Sample sample = TimeSeries.GetKey(i);
+			GoalSeries.Postprocess(sample.Index); // Updating goal height w.r.t. ground
 			NeuralNetwork.Feed(GoalSeries.Transformations[sample.Index].GetPosition().GetRelativePositionTo(root));
 			NeuralNetwork.Feed(GoalSeries.Transformations[sample.Index].GetForward().GetRelativeDirectionTo(root));
 			NeuralNetwork.Feed(GoalSeries.Values[sample.Index]);
@@ -238,6 +245,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 			}
 		}
 
+		//RootSeries.Postprocess(TimeSeries.Pivot);
 		//Get Root
 		Matrix4x4 root = RootSeries.Transformations[TimeSeries.Pivot];
 
