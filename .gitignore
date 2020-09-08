@@ -27,6 +27,8 @@
 /[Aa]ssets/Scenes/
 #/[Aa]ssets/Steps/
 /[Pp]rojectSettings/
+/Assets/Steps/models/
+
 
 *.asset
 *.unity
