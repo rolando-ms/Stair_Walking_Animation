@@ -14,10 +14,10 @@ public class HeightMap {
 	public int Resolution = 25;
 	public LayerMask Mask = -1;
 
-	public float Width = 1;
-	public float Length = 1;
-	public int WidthResolution = 10;
-	public int LengthResolution = 10;
+	public float Width = 0.28f;
+	public float Length = 0.12f;
+	public int WidthResolution = 8;
+	public int LengthResolution = 5;
 
 	public HeightMap(float size, int resolution, LayerMask mask) {
 		Size = size;
@@ -198,6 +198,34 @@ public class HeightMap {
 			UltiDraw.DrawSphere(Points[i], rotation, 0.05f, color);
 			//UltiDraw.DrawQuad(Points[i], rotation, area, area, color);
 		}
+
+		UltiDraw.End();
+	}
+
+	public void DrawFootMap(Color color, float[] mean=null, float[] std=null) {
+		//return;
+		UltiDraw.Begin();
+
+		Quaternion rotation = Pivot.GetRotation() * Quaternion.Euler(90f, 0f, 0f);
+		//color = UltiDraw.IndianRed.Transparent(0.75f);
+		//Quaternion rotation = new Quaternion(1,1,1,1);
+		//float area = (float)Size/(float)(Resolution-1);
+		for(int i=0; i<Points.Length; i++) {
+			//UltiDraw.DrawCircle(Points[i], 0.025f, color);
+			UltiDraw.DrawSphere(Points[i], rotation, 0.05f, color);
+			//UltiDraw.DrawQuad(Points[i], rotation, area, area, color);
+		}
+
+		UltiDraw.End();
+	}
+
+	public void DrawFootPoint(Color color, int iterator, float[] mean=null, float[] std=null) {
+		//return;
+		UltiDraw.Begin();
+
+		Quaternion rotation = Pivot.GetRotation() * Quaternion.Euler(90f, 0f, 0f);
+		
+		UltiDraw.DrawSphere(Points[iterator], rotation, 0.05f, color);
 
 		UltiDraw.End();
 	}
