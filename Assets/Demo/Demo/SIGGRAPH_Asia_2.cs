@@ -3,9 +3,12 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using DeepLearning;
+using BezierSolution;
 
 public class SIGGRAPH_Asia_2 : NeuralAnimation {
 	
+	public bool activeSpline = true;
+	public BezierSpline SplineTrajectory;
 	public bool ShowBiDirectional = true;
 	public bool ShowRoot = true;
 	public bool ShowGoal = true;
@@ -26,6 +29,10 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 	public int HeightMapSize = 3;
 	public int HeightMapResolution = 20;
 
+	public bool UseIK = true;
+	public bool ProjectRoot = true;
+	public bool ProjectGoal = true;
+
 	private Controller Controller;
 	private TimeSeries TimeSeries;
 	private TimeSeries.Root RootSeries;
@@ -36,6 +43,12 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 	private CylinderMap Environment;
 	private CuboidMap Geometry;
 	private HeightMap EnvironmentHeight;
+
+	/*private HeightMap RightFootProjection;//new HeightMap(size, resolution, GroundMask, bool false);
+    private HeightMap LeftFootProjection;
+
+	private Vector3 RightFootCenter = new Vector3(0f, 0f, 0f);
+    private Vector3 LeftFootCenter = new Vector3(0f, 0f, 0f);*/
 
 	private ContactModule contactModule;
 
@@ -61,8 +74,17 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		return TimeSeries;
 	}
 
+	void StopWaiting()
+    {
+      Controller.waiting = false;
+			var points = Controller.getCurrentPoints();
+      points[0].statusMode = points[1].statusMode;
+      Controller.Signal.type = points[0].statusMode;
+    }
+
 	protected override void Setup() {
 		Controller = new Controller();
+		Controller.spline = SplineTrajectory;
 		
 		Controller.Signal idle = Controller.AddSignal("Idle");
 		idle.Default = true;
@@ -86,7 +108,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		walk.AddKey(KeyCode.E, true);
 		walk.AddKey(KeyCode.LeftShift, false);
 		walk.AddKey(KeyCode.C, false);
-		walk.Velocity = 1f;
+		walk.Velocity = 0.8f;
 		walk.UserControl = 0.25f;
 		walk.NetworkControl = 0.25f;
 
@@ -119,6 +141,9 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		Environment = new CylinderMap(CylinderSize, CylinderResolution, CylinderLayers, true);
 		Geometry = new CuboidMap(new Vector3Int(8, 8, 8));
 		EnvironmentHeight = new HeightMap(HeightMapSize, HeightMapResolution, LayerMask.GetMask("Ground","Interaction","Default"));
+
+		//RightFootProjection = new HeightMap(1f, 5, LayerMask.GetMask("Ground"), true);
+        //LeftFootProjection = new HeightMap(1f, 5, LayerMask.GetMask("Ground"), true);
 
 		TimeSeries = new TimeSeries(6, 6, 1f, 1f, 5);
 		RootSeries = new TimeSeries.Root(TimeSeries);
@@ -154,16 +179,27 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		Controller.Update();
 
 		//Updating height w.r.t. ground
-		for(int i=0; i<TimeSeries.Samples.Length; i++){
-			RootSeries.Postprocess(i);
+		if(ProjectRoot){
+			for(int i=0; i<TimeSeries.Samples.Length; i++){
+				RootSeries.Postprocess(i);
+			}
+			//RootSeries.Postprocess(TimeSeries.Pivot);
 		}
-		//RootSeries.Postprocess(TimeSeries.Pivot);
 
 		//Get Root
 		Matrix4x4 root = RootSeries.Transformations[TimeSeries.Pivot];
 
 		//Control Cycle
 		Signals = Controller.PoolSignals();
+		if (activeSpline){
+			if(Controller.getStatusMode() == "Walk"){
+				Signals[0] = 0;
+				Signals[1] = 1;
+			}else{
+				Signals[0] = 1;
+				Signals[1] = 0;
+			}
+		}
 		UserControl = Controller.PoolUserControl(Signals);
 		NetworkControl = Controller.PoolNetworkControl(Signals);
 
@@ -198,15 +234,20 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		//Input Goals
 		for(int i=0; i<TimeSeries.KeyCount; i++) {
 			TimeSeries.Sample sample = TimeSeries.GetKey(i);
-			GoalSeries.Postprocess(sample.Index); // Updating goal height w.r.t. ground
+			if(ProjectGoal){
+				GoalSeries.Postprocess(sample.Index); // Updating goal height w.r.t. ground
+			}
 			NeuralNetwork.Feed(GoalSeries.Transformations[sample.Index].GetPosition().GetRelativePositionTo(root));
 			NeuralNetwork.Feed(GoalSeries.Transformations[sample.Index].GetForward().GetRelativeDirectionTo(root));
 			NeuralNetwork.Feed(GoalSeries.Values[sample.Index]);
 		}
 
 		if(UseHeightMap){
+			EnvironmentHeight.Sense(root);
+			//LeftFootProjection.Sense(root);
+        	//RightFootProjection.Sense(root);
 			for(int i=0; i<EnvironmentHeight.Points.Length; i++) {
-				EnvironmentHeight.Sense(root);
+				//EnvironmentHeight.Sense(root);
 				NeuralNetwork.Feed(EnvironmentHeight.Points[i].GetRelativePositionTo(root));
 			}
 		}else{
@@ -378,12 +419,33 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 			);
 			*/
 		} else {
-			ApplyDynamicGoal(
+			if(activeSpline){
+				Debug.Log("Quit = " + Controller.quit);
+				if(Controller.quit){
+					UnityEditor.EditorApplication.isPlaying = false;
+				}
+				Matrix4x4 root = RootSeries.Transformations[TimeSeries.Pivot];
+				//Vector3 targetDir = Controller.getTransition(root).normalized.GetRelativeDirectionTo(root);
+				Vector3 targetDir = Controller.getTransition(root).normalized;
+				//Debug.DrawRay(root.GetPosition(), targetDir, Color.red);
+				//Debug.Log("Target direction = " + targetDir);
+				bool[] Turns = Controller.OnOffControllerWithHysterisis(root, 15f);
+				ApplyDynamicGoal(
+				RootSeries.Transformations[TimeSeries.Pivot],
+				Controller.QueryMove(Signals),
+				Controller.QueryTurn(Turns[0], Turns[1], 90f), 
+				Signals,
+				Quaternion.LookRotation(targetDir, Vector3.up) * Vector3.ProjectOnPlane(root.GetForward(), Vector3.up).normalized
+			);	
+			}else{
+				ApplyDynamicGoal(
 				RootSeries.Transformations[TimeSeries.Pivot],
 				Controller.QueryMove(KeyCode.W, KeyCode.S, KeyCode.A, KeyCode.D, Signals),
 				Controller.QueryTurn(KeyCode.Q, KeyCode.E, 90f), 
-				Signals
+				Signals,
+				Vector3.zero
 			);
+			}
 		}
 		/*Geometry.Setup(Geometry.Resolution);
 		Geometry.Sense(RootSeries.Transformations[TimeSeries.Pivot], LayerMask.GetMask("Interaction"), Vector3.zero, InteractionSmoothing);
@@ -605,90 +667,95 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 	*/
 
     protected override void Postprocess() {
-		Matrix4x4 rightFoot = Actor.GetBoneTransformation(ContactSeries.Bones[0]);
-		Matrix4x4 leftFoot = Actor.GetBoneTransformation(ContactSeries.Bones[1]);
-		RightFootIK.Objectives[0].SetTarget(rightFoot.GetPosition(), 1f-ContactSeries.Values[TimeSeries.Pivot][0]);
-		RightFootIK.Objectives[0].SetTarget(rightFoot.GetRotation());
-		LeftFootIK.Objectives[0].SetTarget(leftFoot.GetPosition(), 1f-ContactSeries.Values[TimeSeries.Pivot][1]);
-		LeftFootIK.Objectives[0].SetTarget(leftFoot.GetRotation());
-		RightFootIK.Solve();
-		LeftFootIK.Solve();
-		
-		Transform rootTransform = Actor.GetRoot();
-		Vector3 rootTransformPos = rootTransform.transform.position;
-		float rootPosHeight = Utility.GetHeight(rootTransformPos, LayerMask.GetMask("Ground"));
-		//Debug.Log("Root Pos = " + rootPosHeight);
-
-		/*
-		string[] boneNames = Actor.GetBoneNames();
-		//Transform[] actorTransforms = Actor.GetBoneTransforms(boneNames);
-		Transform[] actorTransforms = new Transform[boneNames.Length];
-		Vector3[] actorBonesPos = new Vector3[boneNames.Length];
-		float[] bonePos = new float[boneNames.Length];
-		*/
-
-		/*
-		for(int i=0; i<boneNames.Length; i++){
-			actorTransforms[i] = Actor.FindBone(boneNames[i]).Transform;
-			actorBonesPos[i] = actorTransforms[i].transform.position;
-			actorBonesPos[i].y += rootPosHeight;
-			actorTransforms[i].position = actorBonesPos[i];
-		}
-		*/
-
-		/*
-		Transform hips = Actor.FindBone("Hips").Transform;
-		Vector3 hipsPos = hips.transform.position;
-		//rightPos.y = Mathf.Max(rightPos.y, 0.02f);
-		//spine.position = new Vector3(spinePosition.x, spineHeight + (spinePosition.y - transform.position.y), spinePosition.z);
-		hipsPos.y += rootPosHeight;
-		hips.position = hipsPos;
-		*/
-
-		
-		Transform rightAnkle = Actor.FindBone("RightAnkle").Transform;
-		Vector3 rightAnklePos = rightAnkle.transform.position;
-		//rightPos.y = Mathf.Max(rightPos.y, 0.02f);
-		//spine.position = new Vector3(spinePosition.x, spineHeight + (spinePosition.y - transform.position.y), spinePosition.z);
-		if (rightAnklePos.y < rootPosHeight){
-			rightAnklePos.y = rootPosHeight + 0.05f;
-		}
-		//rightAnklePos.y += rootPosHeight;
-		rightAnkle.position = rightAnklePos;
-
-		Transform leftAnkle = Actor.FindBone("LeftAnkle").Transform;
-		Vector3 leftAnklePos = leftAnkle.transform.position;
-		//rightPos.y = Mathf.Max(rightPos.y, 0.02f);
-		//spine.position = new Vector3(spinePosition.x, spineHeight + (spinePosition.y - transform.position.y), spinePosition.z);
-		if (leftAnklePos.y < rootPosHeight){
-			leftAnklePos.y = rootPosHeight + 0.05f;
-		}
-		//leftAnklePos.y += rootPosHeight;
-		leftAnkle.position = leftAnklePos;
 		
 
-		/*
-		for(int i=0; i<Actor.Bones.Length; i++){
-			actorBonesPos[i].y += rootPosHeight;
+		if(UseIK){
+			Matrix4x4 rightFoot = Actor.GetBoneTransformation(ContactSeries.Bones[0]);
+			Matrix4x4 leftFoot = Actor.GetBoneTransformation(ContactSeries.Bones[1]);
+			RightFootIK.Objectives[0].SetTarget(rightFoot.GetPosition(), 1f-ContactSeries.Values[TimeSeries.Pivot][0]);
+			RightFootIK.Objectives[0].SetTarget(rightFoot.GetRotation());
+			LeftFootIK.Objectives[0].SetTarget(leftFoot.GetPosition(), 1f-ContactSeries.Values[TimeSeries.Pivot][1]);
+			LeftFootIK.Objectives[0].SetTarget(leftFoot.GetRotation());
+			RightFootIK.Solve();
+			LeftFootIK.Solve();
+
+			Transform rootTransform = Actor.GetRoot();
+			Vector3 rootTransformPos = rootTransform.transform.position;
+			float rootPosHeight = Utility.GetHeight(rootTransformPos, LayerMask.GetMask("Ground"));
+			//Debug.Log("Root Pos = " + rootPosHeight);
+
+			/*
+			string[] boneNames = Actor.GetBoneNames();
+			//Transform[] actorTransforms = Actor.GetBoneTransforms(boneNames);
+			Transform[] actorTransforms = new Transform[boneNames.Length];
+			Vector3[] actorBonesPos = new Vector3[boneNames.Length];
+			float[] bonePos = new float[boneNames.Length];
+			*/
+
+			/*
+			for(int i=0; i<boneNames.Length; i++){
+				actorTransforms[i] = Actor.FindBone(boneNames[i]).Transform;
+				actorBonesPos[i] = actorTransforms[i].transform.position;
+				actorBonesPos[i].y += rootPosHeight;
+				actorTransforms[i].position = actorBonesPos[i];
+			}
+			*/
+
+			/*
+			Transform hips = Actor.FindBone("Hips").Transform;
+			Vector3 hipsPos = hips.transform.position;
+			//rightPos.y = Mathf.Max(rightPos.y, 0.02f);
+			//spine.position = new Vector3(spinePosition.x, spineHeight + (spinePosition.y - transform.position.y), spinePosition.z);
+			hipsPos.y += rootPosHeight;
+			hips.position = hipsPos;
+			*/
+
+			
+			Transform rightAnkle = Actor.FindBone("RightAnkle").Transform;
+			Vector3 rightAnklePos = rightAnkle.transform.position;
+			//rightPos.y = Mathf.Max(rightPos.y, 0.02f);
+			//spine.position = new Vector3(spinePosition.x, spineHeight + (spinePosition.y - transform.position.y), spinePosition.z);
+			if (rightAnklePos.y < rootPosHeight){
+				rightAnklePos.y = rootPosHeight + 0.05f;
+			}
+			//rightAnklePos.y += rootPosHeight;
+			rightAnkle.position = rightAnklePos;
+
+			Transform leftAnkle = Actor.FindBone("LeftAnkle").Transform;
+			Vector3 leftAnklePos = leftAnkle.transform.position;
+			//rightPos.y = Mathf.Max(rightPos.y, 0.02f);
+			//spine.position = new Vector3(spinePosition.x, spineHeight + (spinePosition.y - transform.position.y), spinePosition.z);
+			if (leftAnklePos.y < rootPosHeight){
+				leftAnklePos.y = rootPosHeight + 0.05f;
+			}
+			//leftAnklePos.y += rootPosHeight;
+			leftAnkle.position = leftAnklePos;
+			
+
+			/*
+			for(int i=0; i<Actor.Bones.Length; i++){
+				actorBonesPos[i].y += rootPosHeight;
+			}
+			*/
+
+			/*
+			Transform rightToe = Actor.FindBone("RightToe").Transform;
+			Vector3 rightPos = rightToe.transform.position;
+			//float rightPosHeight = Utility.GetHeight(rightPos, LayerMask.GetMask("Ground"));//Added
+			rightPos.y = Mathf.Max(rightPos.y, 0.02f);
+			//spine.position = new Vector3(spinePosition.x, spineHeight + (spinePosition.y - transform.position.y), spinePosition.z);
+			//rightPos.y += rightPosHeight;
+			rightToe.position = rightPos;
+
+			Transform leftToe = Actor.FindBone("LeftToe").Transform;
+			Vector3 leftPos = leftToe.transform.position;
+			//float leftPosHeight = Utility.GetHeight(leftPos, LayerMask.GetMask("Ground"));//Added
+			leftPos.y = Mathf.Max(leftPos.y, 0.02f);
+			//leftPos.y += leftPosHeight;
+			leftToe.position = leftPos;
+			*/
 		}
-		*/
 
-		/*
-		Transform rightToe = Actor.FindBone("RightToe").Transform;
-		Vector3 rightPos = rightToe.transform.position;
-		//float rightPosHeight = Utility.GetHeight(rightPos, LayerMask.GetMask("Ground"));//Added
-		rightPos.y = Mathf.Max(rightPos.y, 0.02f);
-		//spine.position = new Vector3(spinePosition.x, spineHeight + (spinePosition.y - transform.position.y), spinePosition.z);
-		//rightPos.y += rightPosHeight;
-		rightToe.position = rightPos;
-
-		Transform leftToe = Actor.FindBone("LeftToe").Transform;
-		Vector3 leftPos = leftToe.transform.position;
-		//float leftPosHeight = Utility.GetHeight(leftPos, LayerMask.GetMask("Ground"));//Added
-		leftPos.y = Mathf.Max(leftPos.y, 0.02f);
-		//leftPos.y += leftPosHeight;
-		leftToe.position = leftPos;
-		*/
     }
 
 	protected override void OnGUIDerived() {
@@ -735,6 +802,8 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		}
 		if(ShowHeightMap){
 			EnvironmentHeight.Draw();
+			//LeftFootProjection.Draw();
+			//RightFootProjection.Draw();
 		}
 
 		if(ShowBiDirectional) {
@@ -825,26 +894,201 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		Vector3[] positions_blend = new Vector3[TimeSeries.Samples.Length];
 		Vector3[] directions_blend = new Vector3[TimeSeries.Samples.Length];
 		float time = 2f;
+		float TargetBlending = 0.25f;
 		for(int i=0; i<TimeSeries.Samples.Length; i++) {
 			float weight = TimeSeries.GetWeight1byN1(i, 0.5f);
 			float bias_pos = 1.0f - Mathf.Pow(1.0f - weight, 0.75f);
 			float bias_dir = 1.0f - Mathf.Pow(1.0f - weight, 0.75f);
 			directions_blend[i] = Quaternion.AngleAxis(bias_dir * turn, Vector3.up) * Vector3.ProjectOnPlane(root.GetForward(), Vector3.up).normalized;
-			if(i==0) {
-				positions_blend[i] = root.GetPosition() + 
+			/*for(int j=0; j<actions.Length; j++){
+				Debug.Log("Action " + j + " = " + actions[j]);
+			}*/
+			/*if (activeSpline)
+			{
+				if (Controller.Signal.type == BezierSolution.BezierPoint.StatusMode.Wait && !Controller.waiting)
+				{
+					Controller.waiting = true;
+					Invoke("StopWaiting", Controller.getCurrentPoints()[0].timeout);
+				}
+				else
+				{
+					directions_blend[i] = root.GetForward();
+					Vector3 targetDir = Controller.getTransition(root);
+					directions_blend[i] = Vector3.Lerp(directions_blend[i], targetDir, bias_dir);
+					if(i==0){
+						positions_blend[i] = root.GetPosition() + 
+										Vector3.Lerp(positions_blend[i], (Quaternion.LookRotation(targetDir, Vector3.up) * Controller.QueryMove(actions)),
+										bias_pos);	
+					}else{
+						positions_blend[i] = positions_blend[i-1] + 
+										Vector3.Lerp(positions_blend[i], (Quaternion.LookRotation(targetDir, Vector3.up) * Controller.QueryMove(actions)),
+										bias_pos);
+					}
+					
+				}
+			}
+			else{
+				//directions_blend[i] = Quaternion.AngleAxis(bias_dir * turn, Vector3.up) * Vector3.ProjectOnPlane(root.GetForward(), Vector3.up).normalized;
+				if(i==0) {
+					positions_blend[i] = root.GetPosition() + 
 					Vector3.Lerp(
 					GoalSeries.Transformations[i+1].GetPosition() - GoalSeries.Transformations[i].GetPosition(), 
 					time / (TimeSeries.Samples.Length - 1f) * (Quaternion.LookRotation(directions_blend[i], Vector3.up) * move),
 					bias_pos
 					);
-			} else {
-				positions_blend[i] = positions_blend[i-1] + 
+				} else {
+					positions_blend[i] = positions_blend[i-1] + 
 					Vector3.Lerp(
 					GoalSeries.Transformations[i].GetPosition() - GoalSeries.Transformations[i-1].GetPosition(), 
 					time / (TimeSeries.Samples.Length - 1f) * (Quaternion.LookRotation(directions_blend[i], Vector3.up) * move),
 					bias_pos
 					);
+				}
+			}*/
+			//directions_blend[i] = Quaternion.AngleAxis(bias_dir * turn, Vector3.up) * Vector3.ProjectOnPlane(root.GetForward(), Vector3.up).normalized;
+			if(i==0) {
+				positions_blend[i] = root.GetPosition() + 
+				Vector3.Lerp(
+				GoalSeries.Transformations[i+1].GetPosition() - GoalSeries.Transformations[i].GetPosition(), 
+				time / (TimeSeries.Samples.Length - 1f) * (Quaternion.LookRotation(directions_blend[i], Vector3.up) * move),
+				bias_pos
+				);
+			} else {
+				positions_blend[i] = positions_blend[i-1] + 
+				Vector3.Lerp(
+				GoalSeries.Transformations[i].GetPosition() - GoalSeries.Transformations[i-1].GetPosition(), 
+				time / (TimeSeries.Samples.Length - 1f) * (Quaternion.LookRotation(directions_blend[i], Vector3.up) * move),
+				bias_pos
+				);
 			}
+			
+		}
+		for(int i=0; i<TimeSeries.Samples.Length; i++) {
+			Matrix4x4Extensions.SetPosition(ref GoalSeries.Transformations[i], Vector3.Lerp(GoalSeries.Transformations[i].GetPosition(), positions_blend[i], UserControl));
+			Matrix4x4Extensions.SetRotation(ref GoalSeries.Transformations[i], Quaternion.Slerp(GoalSeries.Transformations[i].GetRotation(), Quaternion.LookRotation(directions_blend[i], Vector3.up), UserControl));
+		}
+
+		/*if (activeSpline)
+		{
+			if (SplineController.Style.type == BezierSolution.BezierPoint.StatusMode.Wait && !Controller.waiting)
+			{
+			Controller.waiting = true;
+			Invoke("StopWaiting", Controller.getCurrentPoints()[0].timeout);
+			}
+			else
+			{
+			Vector3 targetDir = Controller.getTransition(transform);
+			TargetDirection = Vector3.Lerp(TargetDirection, targetDir, TargetBlending);
+			TargetVelocity = Vector3.Lerp(TargetVelocity, (Quaternion.LookRotation(TargetDirection, Vector3.up) * Controller.QueryMove()).normalized, TargetBlending);
+			}
+		}*/
+		
+		//Actions
+		for(int i=TimeSeries.Pivot; i<TimeSeries.Samples.Length; i++) {
+			float w = (float)(i-TimeSeries.Pivot) / (float)(TimeSeries.FutureSampleCount);
+			w = Utility.Normalise(w, 0f, 1f, 1f/TimeSeries.FutureKeyCount, 1f);
+			for(int j=0; j<GoalSeries.Actions.Length; j++) {
+				float weight = GoalSeries.Values[i][j];
+				weight = 2f * (0.5f - Mathf.Abs(weight - 0.5f));
+				weight = Utility.Normalise(weight, 0f, 1f, UserControl, 1f-UserControl);
+				if(actions[j] != GoalSeries.Values[i][j]) {
+					GoalSeries.Values[i][j] = Mathf.Lerp(
+						GoalSeries.Values[i][j], 
+						Mathf.Clamp(GoalSeries.Values[i][j] + weight * UserControl * Mathf.Sign(actions[j] - GoalSeries.Values[i][j]), 0f, 1f),
+						w);
+				}
+			}
+		}
+	}
+
+	private void ApplyDynamicGoal(Matrix4x4 root, Vector3 move, float turn, float[] actions, Vector3 direction) {
+		//Transformations
+		Vector3[] positions_blend = new Vector3[TimeSeries.Samples.Length];
+		Vector3[] directions_blend = new Vector3[TimeSeries.Samples.Length];
+		float time = 2f;
+		float TargetBlending = 0.25f;
+		for(int i=0; i<TimeSeries.Samples.Length; i++) {
+			float weight = TimeSeries.GetWeight1byN1(i, 0.5f);
+			float bias_pos = 1.0f - Mathf.Pow(1.0f - weight, 0.75f);
+			float bias_dir = 1.0f - Mathf.Pow(1.0f - weight, 0.75f);
+			//Debug.Log("bias_dir = " + bias_dir);
+			if(!activeSpline){
+				//time = 2f;
+				directions_blend[i] = Quaternion.AngleAxis(bias_dir * turn, Vector3.up) * Vector3.ProjectOnPlane(root.GetForward(), Vector3.up).normalized;
+			}else{
+				if (Controller.Signal.type == BezierSolution.BezierPoint.StatusMode.Wait && !Controller.waiting)
+				{
+					Controller.waiting = true;
+					Invoke("StopWaiting", Controller.getCurrentPoints()[0].timeout);
+				}else{
+					//time = 2f;
+					directions_blend[i] = Quaternion.AngleAxis(bias_dir * turn, Vector3.up) * Vector3.ProjectOnPlane(root.GetForward(), Vector3.up).normalized;
+					//directions_blend[i] = root.GetForward();
+					//directions_blend[i] = Vector3.Lerp(directions_blend[i], direction, 0.15f);
+				}
+			}
+			/*for(int j=0; j<actions.Length; j++){
+				Debug.Log("Action " + j + " = " + actions[j]);
+			}*/
+			/*if (activeSpline)
+			{
+				if (Controller.Signal.type == BezierSolution.BezierPoint.StatusMode.Wait && !Controller.waiting)
+				{
+					Controller.waiting = true;
+					Invoke("StopWaiting", Controller.getCurrentPoints()[0].timeout);
+				}
+				else
+				{
+					directions_blend[i] = root.GetForward();
+					Vector3 targetDir = Controller.getTransition(root);
+					directions_blend[i] = Vector3.Lerp(directions_blend[i], targetDir, bias_dir);
+					if(i==0){
+						positions_blend[i] = root.GetPosition() + 
+										Vector3.Lerp(positions_blend[i], (Quaternion.LookRotation(targetDir, Vector3.up) * Controller.QueryMove(actions)),
+										bias_pos);	
+					}else{
+						positions_blend[i] = positions_blend[i-1] + 
+										Vector3.Lerp(positions_blend[i], (Quaternion.LookRotation(targetDir, Vector3.up) * Controller.QueryMove(actions)),
+										bias_pos);
+					}
+					
+				}
+			}
+			else{
+				//directions_blend[i] = Quaternion.AngleAxis(bias_dir * turn, Vector3.up) * Vector3.ProjectOnPlane(root.GetForward(), Vector3.up).normalized;
+				if(i==0) {
+					positions_blend[i] = root.GetPosition() + 
+					Vector3.Lerp(
+					GoalSeries.Transformations[i+1].GetPosition() - GoalSeries.Transformations[i].GetPosition(), 
+					time / (TimeSeries.Samples.Length - 1f) * (Quaternion.LookRotation(directions_blend[i], Vector3.up) * move),
+					bias_pos
+					);
+				} else {
+					positions_blend[i] = positions_blend[i-1] + 
+					Vector3.Lerp(
+					GoalSeries.Transformations[i].GetPosition() - GoalSeries.Transformations[i-1].GetPosition(), 
+					time / (TimeSeries.Samples.Length - 1f) * (Quaternion.LookRotation(directions_blend[i], Vector3.up) * move),
+					bias_pos
+					);
+				}
+			}*/
+
+			if(i==0) {
+				positions_blend[i] = root.GetPosition() + 
+				Vector3.Lerp(
+				GoalSeries.Transformations[i+1].GetPosition() - GoalSeries.Transformations[i].GetPosition(), 
+				time / (TimeSeries.Samples.Length - 1f) * (Quaternion.LookRotation(directions_blend[i], Vector3.up) * move),
+				bias_pos
+				);
+			} else {
+				positions_blend[i] = positions_blend[i-1] + 
+				Vector3.Lerp(
+				GoalSeries.Transformations[i].GetPosition() - GoalSeries.Transformations[i-1].GetPosition(), 
+				time / (TimeSeries.Samples.Length - 1f) * (Quaternion.LookRotation(directions_blend[i], Vector3.up) * move),
+				bias_pos
+				);
+			}
+			
 		}
 		for(int i=0; i<TimeSeries.Samples.Length; i++) {
 			Matrix4x4Extensions.SetPosition(ref GoalSeries.Transformations[i], Vector3.Lerp(GoalSeries.Transformations[i].GetPosition(), positions_blend[i], UserControl));

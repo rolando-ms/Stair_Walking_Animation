@@ -2,11 +2,29 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using BezierSolution;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
 
 public class Controller {
+
+	//Spline variables********************************
+	public bool Inspect = false;
+	public enum TravelMode { Once, Loop, PingPong };
+	private Transform cachedTransform;
+	public BezierSpline spline;
+	public TravelMode travelMode;
+	private float progress = 0f;
+	float targetSpeed = 0.8f;
+	public bool waiting = false;
+	public float NormalizedT
+	{
+		get { return progress; }
+		set { progress = value; }
+	}
+	public float relaxationAtEndPoints = 0.01f;
+	//*************************************************
 
 	public RaycastHit Projection;
 	public bool ProjectionValid;
@@ -27,6 +45,8 @@ public class Controller {
 	private bool LockZ = true;
 	private Vector2 LastMousePosition;
 	private Vector3 Offset;
+	private float fixedTime = 0.016f;
+	public bool quit = false;
 
 	public void Update() {
 		Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
@@ -172,6 +192,74 @@ public class Controller {
 		}
 	}
 
+	public BezierPoint[] getCurrentPoints() {
+    return spline.GetBezierPoints(ref progress);
+  }
+
+  public String getStatusMode(){
+	String statusMode = String.Empty;
+	BezierPoint gp = spline.GetBezierPoints(ref progress)[0];
+	if(gp.statusMode == BezierPoint.StatusMode.Walk){
+		return "Walk";
+	}else{
+		return "Idle";	
+	}
+  }
+
+  public Vector3 getTransition(Matrix4x4 root)
+  {
+    BezierPoint gp = spline.GetBezierPoints(ref progress)[0];
+    Signal.type = gp.statusMode;
+
+    if (waiting)
+      return Vector3.zero;
+
+    if( progress >= 1f - relaxationAtEndPoints ){
+    	progress -= 1f;
+    }
+    // else if( progress <= relaxationAtEndPoints ) {
+    //   progress += 1f;
+    // }
+	if(progress > 0.6f){
+		this.quit = true;
+	}
+
+	//Debug.Log("Speed = " + targetSpeed);
+	//Debug.Log("Time = " + Time.deltaTime);
+	Debug.Log("Progress = " + progress);
+    Vector3 targetPos = spline.MoveAlongSpline(ref progress, targetSpeed * Time.deltaTime);
+    targetPos = new Vector3(targetPos.x, root.GetPosition().y, targetPos.z);
+
+    if (gp.statusMode == BezierPoint.StatusMode.Run)
+      targetSpeed = 2.0f;
+    else
+      targetSpeed = 0.8f;
+
+    //targetPos = new Vector3(targetPos.x,t.position.y + 0.5f,targetPos.z);
+    return targetPos - root.GetPosition();
+  }
+
+	public bool[] OnOffControllerWithHysterisis(Matrix4x4 root, float hysterisis = 10f){
+		bool[] LeftRigthTurns = {false, false}; //[left, right]
+		//Vector3 targetDir = getTransition(root).normalized.GetRelativeDirectionFrom(root);
+		Vector3 targetDir = getTransition(root).normalized;
+		Debug.DrawRay(root.GetPosition(), targetDir, Color.red);
+		Debug.DrawRay(root.GetPosition(), root.GetForward(), Color.blue);
+		float angle = Vector3.SignedAngle(targetDir, root.GetForward(), Vector3.up);
+		Debug.Log("Signed angle = " + angle);
+		if(angle >= 0 && Mathf.Abs(angle) >= hysterisis){
+			//Turn Left
+			LeftRigthTurns[0] = true;
+			LeftRigthTurns[1] = false;
+		}
+		if(angle < 0 && Mathf.Abs(angle) >= hysterisis){
+			//Turn Right
+			LeftRigthTurns[0] = false;
+			LeftRigthTurns[1] = true;
+		}
+		return LeftRigthTurns;
+	}
+
 	public void SetDefault(Signal signal) {
 		foreach(Signal s in Signals) {
 			s.Default = false;
@@ -218,6 +306,20 @@ public class Controller {
 		Signal signal = GetSignal(name);
 		return signal == null ? false : signal.Query();
 	}
+
+	public Vector3 QueryMove(float[] weights)
+  {
+    Vector3 move = Vector3.zero;
+    if(Signal.type != BezierPoint.StatusMode.Wait)
+    {
+      move.z += 1f;
+    }
+	float bias = 0f;
+	for(int i=0; i<weights.Length; i++) {
+		bias += weights[i] * Signals[i].Velocity;
+	}
+	return bias * move.normalized;
+  }
 
 	public Vector3 QueryMove(KeyCode forward, KeyCode back, KeyCode left, KeyCode right) {
 		Vector3 move = Vector3.zero;
@@ -268,6 +370,17 @@ public class Controller {
 		return weight * turn;
 	}
 
+	public float QueryTurn(bool left, bool right, float weight) {
+		float turn = 0f;
+		if(left) {
+			turn -= 1f;
+		}
+		if(right) {
+			turn += 1f;
+		}
+		return weight * turn;
+	}
+
 	public float[] PoolSignals() {
 		float[] values = new float[Signals.Length];
 		for(int i=0; i<Signals.Length; i++) {
@@ -302,6 +415,8 @@ public class Controller {
 		public bool[] Negations = new bool[0];
 
 		private Controller Controller;
+
+		public static BezierPoint.StatusMode type = BezierPoint.StatusMode.Walk;
 
 		public Signal(Controller controller, string name) {
 			Controller = controller;
@@ -358,6 +473,25 @@ public class Controller {
 
 			return active;
 		}
+
+	public bool QuerySpline()
+    {
+      bool active = false;
+
+      if(Name == "Walk" && type == BezierPoint.StatusMode.Walk)
+      {
+        active = true;
+      }
+      else if (Name == "Jog" && type == BezierPoint.StatusMode.Run)
+      {
+        active = true;
+      }
+      else if (Name == "Stand" && type == BezierPoint.StatusMode.Wait)
+      {
+        active = true;
+      }
+      return active;
+    }
 
 		public void AddKey(KeyCode key, bool positiveOrNegative) {
 			ArrayExtensions.Add(ref Keys, key);
