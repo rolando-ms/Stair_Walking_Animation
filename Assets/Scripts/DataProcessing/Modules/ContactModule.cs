@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 using UnityEditorInternal;
+using UnityEngine.SceneManagement;
 
 public class ContactModule : Module {
 
@@ -49,6 +50,8 @@ public class ContactModule : Module {
 
 	public override void Callback(MotionEditor editor) {
 		if(EditMotion) {
+			//Debug.Log("Max scale noise = " + editor.MaxScaleNoiseZ);
+			//Debug.Log("Random scale noise = " + editor.RandomScaleNoiseZ);
 			float delta = 1f/editor.TargetFramerate;
 			Actor actor = editor.GetActor();
 			IK = UltimateIK.BuildModel(IK, actor.Bones[0].Transform, GetObjectives(actor));
@@ -69,10 +72,12 @@ public class ContactModule : Module {
 			Frame frame = editor.GetCurrentFrame();
 			Frame relative = (frame.Timestamp - delta) < 0f ? Data.GetFrame(frame.Timestamp + delta) : Data.GetFrame(frame.Timestamp - delta);
 			actor.WriteTransforms(relative.GetBoneTransformations(editor.Mirror), Data.Source.GetBoneNames());
-			IK.Solve(GetTargets(relative, editor.Mirror));
+			//IK.Solve(GetTargets(relative, editor.Mirror));
+			IK.Solve(GetTargets(relative, editor));
 			Matrix4x4[] relativePosture = actor.GetBoneTransformations();
 			actor.WriteTransforms(frame.GetBoneTransformations(editor.Mirror), Data.Source.GetBoneNames());
-			IK.Solve(GetTargets(frame, editor.Mirror));
+			//IK.Solve(GetTargets(frame, editor.Mirror));
+			IK.Solve(GetTargets(frame, editor));
 			Matrix4x4[] framePosture = actor.GetBoneTransformations();
 			
 			for(int i=0; i<actor.Bones.Length; i++) {
@@ -152,6 +157,105 @@ public class ContactModule : Module {
 				targets.Add(Sensors[i].GetCorrectedTransformation(frame, mirrored));
 			}
 		}
+		return targets.ToArray();
+	}
+
+	public Matrix4x4[] GetTargets(Frame frame, MotionEditor editor) {
+		UltiDraw.Begin();
+		bool mirrored = editor.Mirror;
+		/*GameObject tread = GameObject.Find("Cube");
+		//Debug.Log("Object name = " + tread);
+		Vector3 treadSize = Vector3.Scale(tread.GetComponent<Transform>().localScale, tread.GetComponent<MeshFilter>().mesh.bounds.size);
+		//Debug.Log("Tread depth = " + treadSize[2].ToString("F2"));
+		float treadDepthScaled = treadSize.z * editor.RandomScaleNoiseZ;
+		//Debug.Log("Depth scaled = " + treadDepthScaled.ToString("F2"));
+		*/
+
+		Actor actor = editor.GetActor();
+		Matrix4x4 rightFoot = actor.GetBoneTransformation("RightAnkle");
+		Matrix4x4 leftFoot = actor.GetBoneTransformation("LeftAnkle");
+
+		RaycastHit hitRightfoot;
+		Physics.Raycast(new Vector3(rightFoot.GetPosition().x, rightFoot.GetPosition().y, rightFoot.GetPosition().z), 
+		                Vector3.down, out hitRightfoot, float.PositiveInfinity); // 8 = Interaction mask
+		UltiDraw.DrawSphere(new Vector3(rightFoot.GetPosition().x, rightFoot.GetPosition().y, rightFoot.GetPosition().z), new Quaternion(0,0,0,1), 0.5f, UltiDraw.Blue);
+		float rightFootHitY = hitRightfoot.point.y;
+		//Debug.Log("Hit point = " + hitRightfoot.point.ToString());
+		//Debug.Log("Right Foot y position = " + rightFoot.GetPosition().y);
+		//Debug.Log("Right Foot height = " + rightFootHitY);
+
+		/*Vector3 sensorStartPos = new Vector3(rightFoot.GetPosition().x, rightFoot.GetPosition().y, rightFoot.GetPosition().z);
+		if (Physics.Raycast(sensorStartPos, Vector3.down, out hitRightfoot, float.PositiveInfinity))
+		{
+			Debug.Log("Hit point!!!");
+			//if it a surface, then Draw Red line to the hit point
+			Debug.DrawLine(sensorStartPos, hitRightfoot.point, Color.red, 2f, false);
+		} else
+		{
+			Debug.Log("Nothing hit!");
+			//If don't hit, then draw Green line to the direction we are sensing,
+			//Note hit.point will remain 0,0,0 at this point, because we don't hit anything
+			//So you cannot use hit.point
+			Debug.DrawLine(sensorStartPos, sensorStartPos + (Vector3.down * float.PositiveInfinity), Color.green, 2f, false);
+		}*/
+
+		RaycastHit hitLeftfoot;
+		Physics.Raycast(new Vector3(leftFoot.GetPosition().x, leftFoot.GetPosition().y, leftFoot.GetPosition().z), 
+		                Vector3.down, out hitLeftfoot, float.PositiveInfinity); // 8 = Interaction mask
+		float leftFootHitY = hitLeftfoot.point.y;
+		//Debug.Log("Local Scale = " + (hitLeftfoot.transform.localScale.x));
+		//Debug.Log("Name of object = " + hitLeftfoot.collider.name);
+		//Debug.Log("Default Z = " + hitLeftfoot.collider.gameObject.GetComponent<NoiseSteps>().DefaultScale.x);
+
+		/*if(rightFootHitY == leftFootHitY){
+			Debug.Log("Same Height!!!");
+		}else{
+			Debug.Log("Different height!");
+		}*/
+		//Matrix4x4.TRS(bone.GetPosition() + Utility.FilterGaussian(distances, contacts), bone.GetRotation(), Vector3.one);
+
+		RaycastHit contactRay;
+		float XTreadOffset = 0f;
+		float scaledTreadSize = 0f;
+		float originalTreadSize = 0f;
+		Vector3 XDirection = Vector3.zero;
+		Transform root = actor.GetRoot();
+
+		List<Matrix4x4> targets = new List<Matrix4x4>();
+		for(int i=0; i<Sensors.Length; i++) {
+			if(Sensors[i].Edit != Sensor.ID.None) {
+				Vector3 contactPoint = Sensors[i].GetContactPoint(frame, mirrored);
+				contactPoint.y += 0.1f;
+				Physics.Raycast(contactPoint, Vector3.down, out contactRay, float.PositiveInfinity);
+				if(contactRay.transform.localScale.x < 1f){
+					originalTreadSize = contactRay.collider.gameObject.GetComponent<NoiseSteps>().DefaultScale.x;
+					scaledTreadSize = contactRay.transform.localScale.x;
+					XTreadOffset = scaledTreadSize - originalTreadSize;
+				}else{
+					XTreadOffset = 0f;
+				}
+				Matrix4x4 correctedTransformation = Sensors[i].GetCorrectedTransformation(frame, mirrored);
+				//Vector3 treadOffset = new Vector3(0.0f,0f,0f);
+				Matrix4x4 bone = frame.GetBoneTransformation(Sensors[i].Bone, mirrored);
+				Matrix4x4 rotationZ = Matrix4x4.TRS(new Vector3(0f,0f,0f), Quaternion.Euler(0f,0f,0f), Vector3.one);
+				//Debug.Log("Sensor " + i + " name  = " + Sensors[i].GetName());
+				//Debug.Log("Dot product = " + Vector3.Dot(correctedTransformation.GetForward(), contactRay.collider.transform.right));
+				//Debug.DrawRay(correctedTransformation.GetPosition(), correctedTransformation.GetForward(), Color.blue, 5f);
+				//Debug.DrawRay(root.position, contactRay.collider.transform.right, Color.red, 5f);
+				if(Vector3.Dot(correctedTransformation.GetForward(), contactRay.collider.transform.right) < 0)
+					XDirection = -1f*correctedTransformation.GetForward();
+				else{
+					XDirection = correctedTransformation.GetForward();
+				}
+				if(mirrored){
+					XDirection *= -1f;	
+				}
+				Matrix4x4 correctedMatrix = Matrix4x4.TRS(correctedTransformation.GetPosition() + XDirection * XTreadOffset, correctedTransformation.GetRotation(), Vector3.one);
+				targets.Add(rotationZ * correctedMatrix);
+				//targets.Add(correctedTransformation);
+			}
+		}
+		UltiDraw.End();
 		return targets.ToArray();
 	}
 
@@ -530,6 +634,7 @@ public class ContactModule : Module {
 		public Vector3 GetCorrectedContactDistance(Frame frame, bool mirrored) {
 			Matrix4x4 bone = frame.GetBoneTransformation(Bone, mirrored);
 			if(SolveDistance) {
+				Vector3 offset = new Vector3(0f,0f,0.0f);
 				return GetCorrectedContactPoint(frame, mirrored) - GetContactDistance(frame, mirrored) - bone.GetPosition();
 			} else {
 				return GetCorrectedContactPoint(frame, mirrored) - bone.GetRotation()*Offset - bone.GetPosition();
@@ -563,6 +668,87 @@ public class ContactModule : Module {
 		}
 
 		public Matrix4x4 GetCorrectedTransformation(Frame frame, bool mirrored) {
+			/*GameObject tread = GameObject.Find("Cube");
+			//Debug.Log("Object name = " + tread);
+			Vector3 treadSize = Vector3.Scale(tread.GetComponent<Transform>().localScale, tread.GetComponent<MeshFilter>().mesh.bounds.size);
+			Debug.Log("Tread depth = " + treadSize[2].ToString("F2"));
+			*/
+			Matrix4x4 bone = frame.GetBoneTransformation(Bone, mirrored);
+			if(Edit == ID.None) {
+				return bone;
+			}
+			if(Edit == ID.Identity) {
+				return bone;
+			}
+			if(GetContact(frame, mirrored) == 1f) {
+				//Gaussian smoothing filter along contact points
+				int width = Mathf.RoundToInt(Module.EditFilter * Module.Data.Framerate);
+				bool[] contacts = new bool[2*width + 1];
+				Vector3[] distances = new Vector3[2*width + 1];
+				contacts[width] = true;
+				distances[width] = GetCorrectedContactDistance(frame, mirrored);
+				for(int i=1; i<=width; i++) {
+					int left = frame.Index - i;
+					int right = frame.Index + i;
+					if(left > 1 && right <= Module.Data.GetTotalFrames()) {
+						if(GetContact(Module.Data.GetFrame(left), mirrored) == 1f && GetContact(Module.Data.GetFrame(right), mirrored) == 1f) {
+							contacts[width-i] = true;
+							contacts[width+i] = true;
+							distances[width-i] = GetCorrectedContactDistance(Module.Data.GetFrame(left), mirrored);
+							distances[width+i] = GetCorrectedContactDistance(Module.Data.GetFrame(right), mirrored);
+						} else {
+							break;
+						}
+					} else {
+						break;
+					}
+				}
+				return Matrix4x4.TRS(bone.GetPosition() + Utility.FilterGaussian(distances, contacts), bone.GetRotation(), Vector3.one);
+			} else {
+				//Interpolation between ground truth and contact points
+				float min = Mathf.Clamp(frame.Timestamp-Module.Window, 0f, Module.Data.GetTotalTime());
+				float max = Mathf.Clamp(frame.Timestamp+Module.Window, 0f, Module.Data.GetTotalTime());
+				Frame start = null;
+				Frame end = null;
+				for(float j=frame.Timestamp; j>=min; j-=1f/Module.Data.Framerate) {
+					Frame reference = Module.Data.GetFrame(j);
+					if(GetContact(reference, mirrored) == 1f) {
+						start = reference;
+						break;
+					}
+				}
+				for(float j=frame.Timestamp; j<=max; j+=1f/Module.Data.Framerate) {
+					Frame reference = Module.Data.GetFrame(j);
+					if(GetContact(reference, mirrored) == 1f) {
+						end = reference;
+						break;
+					}
+				}
+				if(start != null && end == null) {
+					float weight = 1f - (frame.Timestamp - start.Timestamp) / (frame.Timestamp - min);
+					return Matrix4x4.TRS(bone.GetPosition() + weight*GetCorrectedContactDistance(start, mirrored), bone.GetRotation(), Vector3.one);
+				}
+				if(start == null && end != null) {
+					float weight = 1f - (end.Timestamp - frame.Timestamp) / (max - frame.Timestamp);
+					return Matrix4x4.TRS(bone.GetPosition() + weight*GetCorrectedContactDistance(end, mirrored), bone.GetRotation(), Vector3.one);
+				}
+				if(start != null && end != null) {
+					float weight = (frame.Timestamp - start.Timestamp) / (end.Timestamp - start.Timestamp);
+					return Matrix4x4.TRS(
+						bone.GetPosition() + Vector3.Lerp(GetCorrectedContactDistance(start, mirrored), GetCorrectedContactDistance(end, mirrored), weight), 
+						bone.GetRotation(), 
+						Vector3.one
+					);
+				}
+				return bone;
+			}
+		}
+
+		public Matrix4x4 GetCorrectedTransformation(Frame frame, bool mirrored, bool treadDepth) {
+			GameObject tread = GameObject.Find("tread");
+			//Debug.Log("Object name = " + tread);
+			Vector3 treadSize = Vector3.Scale(tread.GetComponent<Transform>().localScale, tread.GetComponent<MeshFilter>().mesh.bounds.size);
+			Debug.Log("Tread depth = " + treadSize[2].ToString("F2"));
 			Matrix4x4 bone = frame.GetBoneTransformation(Bone, mirrored);
 			if(Edit == ID.None) {
 				return bone;
