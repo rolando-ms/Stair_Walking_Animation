@@ -17,6 +17,7 @@ public class ContactModule : Module {
 	public bool CorrectedMotionTrajectory = false;
 	public bool ShowContacts = false;
 	public bool ContactTrajectories = false;
+	public bool ShowFutureGoalPoints = false;
 
 	//public bool ShowSkeletons = false;
 	//public int SkeletonStep = 10;
@@ -136,6 +137,14 @@ public class ContactModule : Module {
 		return contacts;
 	}
 
+	/*public float[] GetFutureGoalPoints(Frame frame, bool mirrored) {
+		float[] contacts = new float[Sensors.Length];
+		for(int i=0; i<Sensors.Length; i++) {
+			contacts[i] = Sensors[i].GetContact(frame, mirrored);
+		}
+		return contacts;
+	}*/
+
 	public float[] GetContacts(Frame frame, bool mirrored, params string[] bones) {
 		float[] contacts = new float[bones.Length];
 		for(int i=0; i<bones.Length; i++) {
@@ -224,6 +233,7 @@ public class ContactModule : Module {
 		List<Matrix4x4> targets = new List<Matrix4x4>();
 		for(int i=0; i<Sensors.Length; i++) {
 			if(Sensors[i].Edit != Sensor.ID.None) {
+				// Shoot a ray and check if collided object is a tread by reading its width. If it is a tread, then we update offset accordingly.
 				Vector3 contactPoint = Sensors[i].GetContactPoint(frame, mirrored);
 				contactPoint.y += 0.1f;
 				Physics.Raycast(contactPoint, Vector3.down, out contactRay, float.PositiveInfinity);
@@ -310,6 +320,8 @@ public class ContactModule : Module {
 			Sensors[s].InverseContactPoints = new Vector3[Data.Frames.Length];
 			Sensors[s].RegularDistances = new Vector3[Data.Frames.Length];
 			Sensors[s].InverseDistances = new Vector3[Data.Frames.Length];
+			Sensors[s].RegularFutureGoalPoints = new Vector3[Data.Frames.Length];
+			Sensors[s].InverseFutureGoalPoints = new Vector3[Data.Frames.Length];
 		}
 		System.DateTime time = Utility.GetTimestamp();
 		//int count = 0;
@@ -328,6 +340,13 @@ public class ContactModule : Module {
 			}
 			//}
 		}
+		for(int i=0; i<Data.Frames.Length; i++){
+			Frame frame = Data.Frames[i];
+			for(int s=0; s<Sensors.Length; s++){
+				Sensors[s].CaptureFutureGoalPoints(frame, FutureTrajectoryWindow, Mathf.RoundToInt(Data.Framerate));
+			}
+		}
+		Debug.Log("Future Goal Points Captured.");
 		editor.LoadFrame(current);
 		EditMotion = edit;
 	}
@@ -408,6 +427,22 @@ public class ContactModule : Module {
 					UltiDraw.DrawSphere(pos, rot, 2f*Sensors[i].Threshold, colors[i]);
 				} else {
 					UltiDraw.DrawSphere(pos, rot, 2f*Sensors[i].Threshold, colors[i].Transparent(0.125f));
+				}
+			}
+		}
+
+		if(ShowFutureGoalPoints) {
+			for(int i=0; i<Sensors.Length; i++) {
+				if(Sensors[i].Edit != Sensor.ID.None) {
+					float currentTimeStamp = editor.GetCurrentFrame().Timestamp;
+					for(float j=currentTimeStamp; j<=currentTimeStamp + 0; j+=Mathf.Max(Step, 1)/Data.Framerate) {
+						Frame reference = Data.GetFrame(j);
+						//if(Sensors[i].GetContact(reference, editor.Mirror) == 1f) {
+						UltiDraw.DrawSphere(Sensors[i].GetFutureGoalPoint(reference, editor.Mirror), Quaternion.identity, DrawScale*0.5f, colors[i]);
+						//Debug.Log("Future goal point = " + Sensors[i].GetFutureGoalPoint(reference, editor.Mirror));
+						//}
+						//Debug.Log("Frame time = " + Data.GetFrame(j).Timestamp);
+					}
 				}
 			}
 		}
@@ -538,6 +573,7 @@ public class ContactModule : Module {
 		ShowDistances = EditorGUILayout.Toggle("Show Distances", ShowDistances);
 		TrueMotionTrajectory = EditorGUILayout.Toggle("True Motion Trajectory", TrueMotionTrajectory);
 		CorrectedMotionTrajectory = EditorGUILayout.Toggle("Corrected Motion Trajectory", CorrectedMotionTrajectory);
+		ShowFutureGoalPoints = EditorGUILayout.Toggle("Show Future Goal Points", ShowFutureGoalPoints);
 		PastTrajectoryWindow = EditorGUILayout.FloatField("Past Trajectory Window", PastTrajectoryWindow);
 		FutureTrajectoryWindow = EditorGUILayout.FloatField("Future Trajectory Window" , FutureTrajectoryWindow);
 		//ShowSkeletons = EditorGUILayout.Toggle("Show Skeletons", ShowSkeletons);
@@ -590,6 +626,8 @@ public class ContactModule : Module {
 		public Vector3[] RegularContactPoints, InverseContactPoints = new Vector3[0];
 		public Vector3[] RegularDistances, InverseDistances = new Vector3[0];
 
+		public Vector3[] RegularFutureGoalPoints, InverseFutureGoalPoints = new Vector3[0];
+
 		public Sensor(ContactModule module, int bone, Vector3 offset, float threshold, float tolerance, float velocity, ID capture, ID edit) {
 			Module = module;
 			Bone = bone;
@@ -605,6 +643,8 @@ public class ContactModule : Module {
 			InverseContactPoints = new Vector3[Module.Data.Frames.Length];
 			RegularDistances = new Vector3[Module.Data.Frames.Length];
 			InverseDistances = new Vector3[Module.Data.Frames.Length];
+			RegularFutureGoalPoints = new Vector3[Module.Data.Frames.Length];
+			InverseFutureGoalPoints = new Vector3[Module.Data.Frames.Length];
 		}
 
 		public string GetName() {
@@ -629,6 +669,10 @@ public class ContactModule : Module {
 
 		public Vector3 GetContactPoint(Frame frame, bool mirrored) {
 			return mirrored ? InverseContactPoints[frame.Index-1] : RegularContactPoints[frame.Index-1];
+		}
+
+		public Vector3 GetFutureGoalPoint(Frame frame, bool mirrored){
+			return mirrored ? InverseFutureGoalPoints[frame.Index-1] : RegularFutureGoalPoints[frame.Index-1];
 		}
 
 		public Vector3 GetCorrectedContactDistance(Frame frame, bool mirrored) {
@@ -1036,6 +1080,29 @@ public class ContactModule : Module {
 						InverseContactPoints[frame.Index-1] = GetPivot(frame, true);
 						InverseDistances[frame.Index-1] = Vector3.zero;
 					}
+				}
+			}
+		}
+
+		public void CaptureFutureGoalPoints(Frame frame, float FutureTrajectoryWindow, int Framerate){
+			//Check for contact point in future window, if no contact then while backwards until find a contact
+			int start = 0;
+			int end = Mathf.RoundToInt(FutureTrajectoryWindow * Framerate);
+			if(frame.Index + end >= RegularContacts.Length){
+				end = RegularContacts.Length - frame.Index;
+			}
+			//Use ints in window to check if contact is done
+			for(int j=end - 1; j>start; j-=1){
+				if(RegularContacts[frame.Index+j] != 0f){
+					RegularFutureGoalPoints[frame.Index-1] = RegularContactPoints[frame.Index+j];
+					break;
+				}
+			}
+			//}
+			for(int j=end - 1; j>start; j-=1){
+				if(InverseContacts[frame.Index+j] != 0f){
+					InverseFutureGoalPoints[frame.Index-1] = InverseContactPoints[frame.Index+j];
+					break;
 				}
 			}
 		}
