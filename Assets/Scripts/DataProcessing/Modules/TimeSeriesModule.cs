@@ -36,6 +36,12 @@ public class TimeSeriesModule : Module {
 			if(series is TimeSeries.Root && Data.GetModule(ID.Root).Visualise) {
 				((TimeSeries.Root)series).Draw();
 			}
+			if(series is TimeSeries.Feet){
+				RootModule m = (RootModule)Data.GetModule(ID.Root);
+				if(m.useSteps){
+					((TimeSeries.Feet)series).Draw();
+				}
+			}
 			if(series is TimeSeries.Style && Data.GetModule(ID.Style).Visualise) {
 				((TimeSeries.Style)series).Draw();
 			}
@@ -88,7 +94,38 @@ public class TimeSeriesModule : Module {
 						series.Velocities[i] = m.GetRootVelocity(Data.GetFrame(t), mirrored, delta);
 					}
 				}
+				if(m.useSteps){
+					TimeSeries.Feet seriesFeet = new TimeSeries.Feet(timeSeries);
+					for(int i=0; i<timeSeries.Samples.Length; i++) {
+						float t = frame.Timestamp + timeSeries.Samples[i].Timestamp;
+						if(t < 0f || t > Data.GetTotalTime()) {
+							seriesFeet.LeftFootTransformations[i] = m.GetEstimatedLeftFootTransformation(frame, timeSeries.Samples[i].Timestamp, mirrored);
+							seriesFeet.LeftFootVelocities[i] = m.GetEstimatedLeftFootVelocity(frame, timeSeries.Samples[i].Timestamp, mirrored, delta);
+							seriesFeet.RightFootTransformations[i] = m.GetEstimatedRightFootTransformation(frame, timeSeries.Samples[i].Timestamp, mirrored);
+							seriesFeet.RightFootVelocities[i] = m.GetEstimatedRightFootVelocity(frame, timeSeries.Samples[i].Timestamp, mirrored, delta);
+						} else {
+							seriesFeet.LeftFootTransformations[i] = m.GetLeftFootTransformation(Data.GetFrame(t), mirrored);
+							seriesFeet.LeftFootVelocities[i] = m.GetLeftFootVelocity(Data.GetFrame(t), mirrored, delta);
+							seriesFeet.RightFootTransformations[i] = m.GetRightFootTransformation(Data.GetFrame(t), mirrored);
+							seriesFeet.RightFootVelocities[i] = m.GetRightFootVelocity(Data.GetFrame(t), mirrored, delta);
+						}
+					}
+				}
 			}
+			/*if(module is FeetModule) {
+				RootModule m = (RootModule)module;
+				TimeSeries.Root series = new TimeSeries.Root(timeSeries);
+				for(int i=0; i<timeSeries.Samples.Length; i++) {
+					float t = frame.Timestamp + timeSeries.Samples[i].Timestamp;
+					if(t < 0f || t > Data.GetTotalTime()) {
+						series.Transformations[i] = m.GetEstimatedRootTransformation(frame, timeSeries.Samples[i].Timestamp, mirrored);
+						series.Velocities[i] = m.GetEstimatedRootVelocity(frame, timeSeries.Samples[i].Timestamp, mirrored, delta);
+					} else {
+						series.Transformations[i] = m.GetRootTransformation(Data.GetFrame(t), mirrored);
+						series.Velocities[i] = m.GetRootVelocity(Data.GetFrame(t), mirrored, delta);
+					}
+				}
+			}*/
 			if(module is StyleModule) {
 				StyleModule m = (StyleModule)module;
 				TimeSeries.Style series = new TimeSeries.Style(timeSeries, m.GetNames());

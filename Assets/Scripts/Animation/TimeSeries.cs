@@ -124,7 +124,7 @@ public class TimeSeries {
     }
 
 	public abstract class Series {
-		public enum ID {Root, Style, Goal, Contact, Phase, Alignment, Length};
+		public enum ID {Root, Feet, Style, Goal, Contact, Phase, Alignment, Length};
 		public TimeSeries TimeSeries;
 		public abstract ID GetID();
 	}
@@ -228,6 +228,194 @@ public class TimeSeries {
 			//Velocities
 			for(int i=0; i<Velocities.Length; i+=step) {
 				UltiDraw.DrawLine(Transformations[i].GetPosition(), Transformations[i].GetPosition() + Velocities[i], 0.025f, 0f, UltiDraw.DarkGreen.Transparent(0.25f));
+			}
+
+			/*
+			//Velocity Magnitudes
+			List<float[]> functions = new List<float[]>();
+			float[] magnitudes = new float[Velocities.Length];
+			for(int i=0; i<Velocities.Length; i++) {
+				magnitudes[i] = Velocities[i].magnitude;
+			}
+			functions.Add(magnitudes);
+			functions.Add(Speeds);
+			UltiDraw.DrawGUIFunctions(new Vector2(0.125f, 0.125f), new Vector2(0.2f, 0.1f), functions, 0f, 5f, 0.0025f, UltiDraw.DarkGrey, new Color[2]{UltiDraw.DarkGreen, UltiDraw.DarkRed}, 0.0025f, UltiDraw.Black);
+			*/
+			
+			UltiDraw.End();
+		}
+	}
+
+	public class Feet : Series {
+		public Matrix4x4[] LeftFootTransformations;
+		public Vector3[] LeftFootVelocities;
+
+		public Matrix4x4[] RightFootTransformations;
+		public Vector3[] RightFootVelocities;
+		// public float[] Speeds;
+
+		public override ID GetID() {
+			return Series.ID.Feet;
+		}
+
+		public Feet(TimeSeries timeSeries) {
+			timeSeries.Add(this);
+			LeftFootTransformations = new Matrix4x4[TimeSeries.Samples.Length];
+			LeftFootVelocities = new Vector3[TimeSeries.Samples.Length];
+			RightFootTransformations = new Matrix4x4[TimeSeries.Samples.Length];
+			RightFootVelocities = new Vector3[TimeSeries.Samples.Length];
+			// Speeds = new float[TimeSeries.Samples.Length];
+			for(int i=0; i<LeftFootTransformations.Length; i++) {
+				LeftFootTransformations[i] = Matrix4x4.identity;
+				LeftFootVelocities[i] = Vector3.zero;
+				RightFootTransformations[i] = Matrix4x4.identity;
+				RightFootVelocities[i] = Vector3.zero;
+				// Speeds[i] = 0f;
+			}
+		}
+
+		public void SetLeftFootTransformation(int index, Matrix4x4 transformation) {
+			LeftFootTransformations[index] = transformation;
+		}
+
+		public void SetRightFootTransformation(int index, Matrix4x4 transformation) {
+			RightFootTransformations[index] = transformation;
+		}
+
+		public Matrix4x4 GetLeftFootTransformation(int index) {
+			return LeftFootTransformations[index];
+		}
+
+		public Matrix4x4 GetRightFootTransformation(int index) {
+			return RightFootTransformations[index];
+		}
+
+		public void SetLeftFootPosition(int index, Vector3 position) {
+			Matrix4x4Extensions.SetPosition(ref LeftFootTransformations[index], position);
+		}
+
+		public void SetRightFootPosition(int index, Vector3 position) {
+			Matrix4x4Extensions.SetPosition(ref RightFootTransformations[index], position);
+		}
+
+		public Vector3 GetLeftFootPosition(int index) {
+			return LeftFootTransformations[index].GetPosition();
+		}
+
+		public Vector3 GetRightFootPosition(int index) {
+			return RightFootTransformations[index].GetPosition();
+		}
+
+		public void SetLeftFootRotation(int index, Quaternion rotation) {
+			Matrix4x4Extensions.SetRotation(ref LeftFootTransformations[index], rotation);
+		}
+
+		public void SetRightFootRotation(int index, Quaternion rotation) {
+			Matrix4x4Extensions.SetRotation(ref RightFootTransformations[index], rotation);
+		}
+
+		public Quaternion GetLeftFootRotation(int index) {
+			return LeftFootTransformations[index].GetRotation();
+		}
+
+		public Quaternion GetRightFootRotation(int index) {
+			return RightFootTransformations[index].GetRotation();
+		}
+
+		public void SetLeftFootDirection(int index, Vector3 direction) {
+			Matrix4x4Extensions.SetRotation(ref LeftFootTransformations[index], Quaternion.LookRotation(direction == Vector3.zero ? Vector3.forward : direction, Vector3.up));
+		}
+
+		public void SetRightFootDirection(int index, Vector3 direction) {
+			Matrix4x4Extensions.SetRotation(ref RightFootTransformations[index], Quaternion.LookRotation(direction == Vector3.zero ? Vector3.forward : direction, Vector3.up));
+		}
+
+		public Vector3 GetLeftFootDirection(int index) {
+			return LeftFootTransformations[index].GetForward();
+		}
+
+		public Vector3 GetRightFootDirection(int index) {
+			return RightFootTransformations[index].GetForward();
+		}
+
+		public void SetLeftFootVelocity(int index, Vector3 velocity) {
+			LeftFootVelocities[index] = velocity;
+		}
+
+		public void SetRightFootVelocity(int index, Vector3 velocity) {
+			RightFootVelocities[index] = velocity;
+		}
+
+		public Vector3 GetLeftFootVelocity(int index) {
+			return LeftFootVelocities[index];
+		}
+
+		public Vector3 GetRightFootVelocity(int index) {
+			return RightFootVelocities[index];
+		}
+
+		public float ComputeLeftFootSpeed() {
+			float length = 0f;
+			for(int i=TimeSeries.Pivot+TimeSeries.Resolution; i<TimeSeries.Samples.Length; i+=TimeSeries.Resolution) {
+				length += Vector3.Distance(GetLeftFootPosition(i-TimeSeries.Resolution), GetLeftFootPosition(i));
+			}
+			return length / TimeSeries.FutureWindow;
+		}
+
+		public float ComputeRightFootSpeed() {
+			float length = 0f;
+			for(int i=TimeSeries.Pivot+TimeSeries.Resolution; i<TimeSeries.Samples.Length; i+=TimeSeries.Resolution) {
+				length += Vector3.Distance(GetRightFootPosition(i-TimeSeries.Resolution), GetRightFootPosition(i));
+			}
+			return length / TimeSeries.FutureWindow;
+		}
+
+		/*public void Postprocess(int index) {
+			LayerMask mask = LayerMask.GetMask("Ground");
+			Vector3 position = Transformations[index].GetPosition();
+			Vector3 direction = Transformations[index].GetForward();
+
+			position.y = Utility.GetHeight(Transformations[index].GetPosition(), mask);
+			SetPosition(index, position);
+		}*/
+
+		public void Draw() {
+			int step = TimeSeries.Resolution;
+			UltiDraw.Begin();
+			//Connections
+			for(int i=0; i<LeftFootTransformations.Length-step; i+=step) {
+				UltiDraw.DrawLine(LeftFootTransformations[i].GetPosition(), LeftFootTransformations[i+step].GetPosition(), 0.01f, UltiDraw.Black);
+			}
+
+			for(int i=0; i<RightFootTransformations.Length-step; i+=step) {
+				UltiDraw.DrawLine(RightFootTransformations[i].GetPosition(), RightFootTransformations[i+step].GetPosition(), 0.01f, UltiDraw.Black);
+			}
+
+			//Positions
+			for(int i=0; i<LeftFootTransformations.Length; i+=step) {
+				UltiDraw.DrawSphere(LeftFootTransformations[i].GetPosition(), Quaternion.identity, 0.025f, UltiDraw.Black);
+			}
+
+			for(int i=0; i<RightFootTransformations.Length; i+=step) {
+				UltiDraw.DrawSphere(RightFootTransformations[i].GetPosition(), Quaternion.identity, 0.025f, UltiDraw.Grey);
+			}
+
+			//Directions
+			for(int i=0; i<LeftFootTransformations.Length; i+=step) {
+				UltiDraw.DrawLine(LeftFootTransformations[i].GetPosition(), LeftFootTransformations[i].GetPosition() + 0.25f*LeftFootTransformations[i].GetForward(), 0.025f, 0f, UltiDraw.Orange.Transparent(0.75f));
+			}
+
+			for(int i=0; i<RightFootTransformations.Length; i+=step) {
+				UltiDraw.DrawLine(RightFootTransformations[i].GetPosition(), RightFootTransformations[i].GetPosition() + 0.25f*RightFootTransformations[i].GetForward(), 0.025f, 0f, UltiDraw.Orange.Transparent(0.75f));
+			}
+
+			//Velocities
+			for(int i=0; i<LeftFootVelocities.Length; i+=step) {
+				UltiDraw.DrawLine(LeftFootTransformations[i].GetPosition(), LeftFootTransformations[i].GetPosition() + LeftFootVelocities[i], 0.025f, 0f, UltiDraw.DarkGreen.Transparent(0.25f));
+			}
+
+			for(int i=0; i<RightFootVelocities.Length; i+=step) {
+				UltiDraw.DrawLine(RightFootTransformations[i].GetPosition(), RightFootTransformations[i].GetPosition() + RightFootVelocities[i], 0.025f, 0f, UltiDraw.DarkGreen.Transparent(0.25f));
 			}
 
 			/*

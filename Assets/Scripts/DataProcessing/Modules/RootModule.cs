@@ -14,6 +14,8 @@ public class RootModule : Module {
 	public LayerMask Ground = -1;
     public Axis ForwardAxis = Axis.ZPositive;
 
+	public bool useSteps = false;
+
 	public override ID GetID() {
 		return ID.Root;
 	}
@@ -62,6 +64,7 @@ public class RootModule : Module {
 		Hips = EditorGUILayout.Popup("Hips", Hips, Data.Source.GetBoneNames());
 		ForwardAxis = (Axis)EditorGUILayout.EnumPopup("Forward Axis", ForwardAxis);
 		Ground = InternalEditorUtility.ConcatenatedLayersMaskToLayerMask(EditorGUILayout.MaskField("Ground Mask", InternalEditorUtility.LayerMaskToConcatenatedLayersMask(Ground), InternalEditorUtility.layers));
+		useSteps = EditorGUILayout.Toggle("Use Steps Data", useSteps);
 	}
 
 	public void DetectSetup() {
@@ -193,6 +196,108 @@ public class RootModule : Module {
 		};
 	}
 	*/
+
+	/* 
+	****************************************************************
+		Feet Data
+	****************************************************************
+	*/ 
+
+	public Matrix4x4 GetLeftFootTransformation(Frame frame, bool mirrored) {
+		return Matrix4x4.TRS(GetLeftFootPosition(frame, mirrored), GetLeftFootRotation(frame, mirrored), Vector3.one);
+	}
+
+	public Vector3 GetLeftFootPosition(Frame frame, bool mirrored) {
+		return frame.GetBoneTransformation("LeftAnkle", mirrored).GetPosition();
+	}
+
+	public Quaternion GetLeftFootRotation(Frame frame, bool mirrored) {
+		return frame.GetBoneTransformation("LeftAnkle", mirrored).GetRotation();
+	}
+
+	public Vector3 GetLeftFootVelocity(Frame frame, bool mirrored, float delta) {
+		return frame.GetBoneVelocity("LeftAnkle", mirrored, delta);
+	}
+
+	public Matrix4x4 GetEstimatedLeftFootTransformation(Frame reference, float offset, bool mirrored) {
+		return Matrix4x4.TRS(GetEstimatedLeftFootPosition(reference, offset, mirrored), GetEstimatedLeftFootRotation(reference, offset, mirrored), Vector3.one);
+	}
+
+	public Vector3 GetEstimatedLeftFootPosition(Frame reference, float offset, bool mirrored) {
+		float t = reference.Timestamp + offset;
+		if(t < 0f || t > Data.GetTotalTime()) {
+			float boundary = Mathf.Clamp(t, 0f, Data.GetTotalTime());
+			float pivot = 2f*boundary - t;
+			float clamped = Mathf.Clamp(pivot, 0f, Data.GetTotalTime());
+			return 2f*GetLeftFootPosition(Data.GetFrame(boundary), mirrored) - GetLeftFootPosition(Data.GetFrame(clamped), mirrored);
+		} else {
+			return GetLeftFootPosition(Data.GetFrame(t), mirrored);
+		}
+	}
+
+	public Quaternion GetEstimatedLeftFootRotation(Frame reference, float offset, bool mirrored) {
+		float t = reference.Timestamp + offset;
+		if(t < 0f || t > Data.GetTotalTime()) {
+			float boundary = Mathf.Clamp(t, 0f, Data.GetTotalTime());
+			float pivot = 2f*boundary - t;
+			float clamped = Mathf.Clamp(pivot, 0f, Data.GetTotalTime());
+			return GetLeftFootRotation(Data.GetFrame(clamped), mirrored);
+		} else {
+			return GetLeftFootRotation(Data.GetFrame(t), mirrored);
+		}
+	}
+
+	public Vector3 GetEstimatedLeftFootVelocity(Frame reference, float offset, bool mirrored, float delta) {
+		return (GetEstimatedLeftFootPosition(reference, offset + delta, mirrored) - GetEstimatedLeftFootPosition(reference, offset, mirrored)) / delta;
+	}
+
+	public Matrix4x4 GetRightFootTransformation(Frame frame, bool mirrored) {
+		return Matrix4x4.TRS(GetRightFootPosition(frame, mirrored), GetRightFootRotation(frame, mirrored), Vector3.one);
+	}
+
+	public Vector3 GetRightFootPosition(Frame frame, bool mirrored) {
+		return frame.GetBoneTransformation("RightAnkle", mirrored).GetPosition();
+	}
+
+	public Quaternion GetRightFootRotation(Frame frame, bool mirrored) {
+		return frame.GetBoneTransformation("RightAnkle", mirrored).GetRotation();
+	}
+
+	public Vector3 GetRightFootVelocity(Frame frame, bool mirrored, float delta) {
+		return frame.GetBoneVelocity("RightAnkle", mirrored, delta);
+	}
+
+	public Matrix4x4 GetEstimatedRightFootTransformation(Frame reference, float offset, bool mirrored) {
+		return Matrix4x4.TRS(GetEstimatedRightFootPosition(reference, offset, mirrored), GetEstimatedRightFootRotation(reference, offset, mirrored), Vector3.one);
+	}
+
+	public Vector3 GetEstimatedRightFootPosition(Frame reference, float offset, bool mirrored) {
+		float t = reference.Timestamp + offset;
+		if(t < 0f || t > Data.GetTotalTime()) {
+			float boundary = Mathf.Clamp(t, 0f, Data.GetTotalTime());
+			float pivot = 2f*boundary - t;
+			float clamped = Mathf.Clamp(pivot, 0f, Data.GetTotalTime());
+			return 2f*GetRightFootPosition(Data.GetFrame(boundary), mirrored) - GetRightFootPosition(Data.GetFrame(clamped), mirrored);
+		} else {
+			return GetRightFootPosition(Data.GetFrame(t), mirrored);
+		}
+	}
+
+	public Quaternion GetEstimatedRightFootRotation(Frame reference, float offset, bool mirrored) {
+		float t = reference.Timestamp + offset;
+		if(t < 0f || t > Data.GetTotalTime()) {
+			float boundary = Mathf.Clamp(t, 0f, Data.GetTotalTime());
+			float pivot = 2f*boundary - t;
+			float clamped = Mathf.Clamp(pivot, 0f, Data.GetTotalTime());
+			return GetRightFootRotation(Data.GetFrame(clamped), mirrored);
+		} else {
+			return GetRightFootRotation(Data.GetFrame(t), mirrored);
+		}
+	}
+
+	public Vector3 GetEstimatedRightFootVelocity(Frame reference, float offset, bool mirrored, float delta) {
+		return (GetEstimatedRightFootPosition(reference, offset + delta, mirrored) - GetEstimatedRightFootPosition(reference, offset, mirrored)) / delta;
+	}
 
 }
 #endif
