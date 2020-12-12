@@ -14,7 +14,7 @@ public class RootModule : Module {
 	public LayerMask Ground = -1;
     public Axis ForwardAxis = Axis.ZPositive;
 
-	public bool useSteps = false;
+	//public bool useSteps = false;
 
 	public override ID GetID() {
 		return ID.Root;
@@ -64,7 +64,7 @@ public class RootModule : Module {
 		Hips = EditorGUILayout.Popup("Hips", Hips, Data.Source.GetBoneNames());
 		ForwardAxis = (Axis)EditorGUILayout.EnumPopup("Forward Axis", ForwardAxis);
 		Ground = InternalEditorUtility.ConcatenatedLayersMaskToLayerMask(EditorGUILayout.MaskField("Ground Mask", InternalEditorUtility.LayerMaskToConcatenatedLayersMask(Ground), InternalEditorUtility.layers));
-		useSteps = EditorGUILayout.Toggle("Use Steps Data", useSteps);
+		//useSteps = EditorGUILayout.Toggle("Use Steps Data", useSteps);
 	}
 
 	public void DetectSetup() {
@@ -203,7 +203,7 @@ public class RootModule : Module {
 	****************************************************************
 	*/ 
 
-	public Matrix4x4 GetLeftFootTransformation(Frame frame, bool mirrored) {
+	/*public Matrix4x4 GetLeftFootTransformation(Frame frame, bool mirrored) {
 		return Matrix4x4.TRS(GetLeftFootPosition(frame, mirrored), GetLeftFootRotation(frame, mirrored), Vector3.one);
 	}
 
@@ -297,7 +297,7 @@ public class RootModule : Module {
 
 	public Vector3 GetEstimatedRightFootVelocity(Frame reference, float offset, bool mirrored, float delta) {
 		return (GetEstimatedRightFootPosition(reference, offset + delta, mirrored) - GetEstimatedRightFootPosition(reference, offset, mirrored)) / delta;
-	}
+	}*/
 
 }
 #endif

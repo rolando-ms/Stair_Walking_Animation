@@ -249,7 +249,8 @@ public class MotionExporter : EditorWindow {
 							Load();
 						}
 						if(Utility.GUIButton("Export Data", UltiDraw.DarkGrey, UltiDraw.White)) {
-							this.StartCoroutine(ExportDataSIGGRAPHAsia());
+							//this.StartCoroutine(ExportDataSIGGRAPHAsia());
+							this.StartCoroutine(ExportDataSteps());
 						}
 					} else {
 						EditorGUILayout.LabelField("File: " + Editor.GetData().GetName());
@@ -763,7 +764,369 @@ public class MotionExporter : EditorWindow {
 		}
 	}
 
+	private IEnumerator ExportDataSteps() {
+		if(Editor == null) {
+			Debug.Log("No editor found.");
+		} else if(!System.IO.Directory.Exists(Application.dataPath + "/../../Export")) {
+			Debug.Log("No export folder found at " + GetExportPath() + ".");
+		} else {
+			Exporting = true;
+
+			Progress = 0f;
+
+			int total = 0;
+			int items = 0;
+			int sequence = 0;
+			DateTime timestamp = Utility.GetTimestamp();
+
+			Data X = new Data(CreateFile("Input"), CreateFile("InputNorm"), CreateFile("InputLabels"));
+			Data Y = new Data(CreateFile("Output"), CreateFile("OutputNorm"), CreateFile("OutputLabels"));
+
+			StreamWriter S = CreateFile("Sequences");
+
+			bool editorSave = Editor.Save;
+			bool editorMirror = Editor.Mirror;
+			float editorRate = Editor.TargetFramerate;
+			int editorSeed = Editor.RandomSeed;
+			Editor.Save = false;
+			Editor.SetTargetFramerate(Framerate);
+			for(int i=0; i<Files.Count; i++) {
+				if(!Exporting) {
+					break;
+				}
+				if(Export[i]) {
+					Index = i;
+					Editor.LoadData(Files[i]);
+					while(!Editor.GetData().GetScene().isLoaded) {
+						Debug.Log("Waiting for scene to be loaded.");
+						yield return new WaitForSeconds(0f);
+					}
+					for(int m=1; m<=2; m++) {
+						if(!Exporting) {
+							break;
+						}
+						if(m==1) {
+							Editor.SetMirror(false);
+						}
+						if(m==2) {
+							Editor.SetMirror(true);
+						}
+						if(!Editor.Mirror || WriteMirror && Editor.Mirror && Editor.GetData().Symmetric) {
+							Debug.Log("File: " + Editor.GetData().GetName() + " Scene: " + Editor.GetData().GetName() + " " + (Editor.Mirror ? "[Mirror]" : "[Default]"));
+
+							//foreach(Sequence seq in Editor.GetData().Sequences) {
+							Sequence seq = Editor.GetData().GetUnrolledSequence(); {
+								sequence += 1;
+
+								//Precomputations
+								for(int j=0; j<Actions.Count; j++) {
+									Actions[j].Setup(((GoalModule)Editor.GetData().GetModule(Module.ID.Goal)).GetNames());
+								}
+								for(int j=0; j<Styles.Count; j++) {
+									Styles[j].Setup(((StyleModule)Editor.GetData().GetModule(Module.ID.Style)).GetNames());
+								}
+
+								if(
+									(((GoalModule)Editor.GetData().GetModule(Module.ID.Goal)).GetGoalFunction("Sit") != null && ((ContactModule)Editor.GetData().GetModule(Module.ID.Contact)).EditMotion == false)
+									||
+									(((StyleModule)Editor.GetData().GetModule(Module.ID.Style)).GetStyleFunction("Climb") != null && ((ContactModule)Editor.GetData().GetModule(Module.ID.Contact)).EditMotion == false)
+									||
+									(Editor.GetData().name.Contains("Shelf") && ((ContactModule)Editor.GetData().GetModule(Module.ID.Contact)).EditMotion == false)
+								) {
+									Debug.LogError("No editing in file " + Editor.GetData().name + "!");								
+								}
+
+								//Exporting
+								float start = Editor.CeilToTargetTime(Editor.GetData().GetFrame(seq.Start).Timestamp);
+								float end = Editor.FloorToTargetTime(Editor.GetData().GetFrame(seq.End).Timestamp);
+								int sample = 0;
+								while(start+(sample+1)/Framerate <= end) {
+									if(!Exporting) {
+										break;
+									}
+									Editor.SetRandomSeed(sample+1);
+									InputSteps current = new InputSteps(Editor, start+sample/Framerate);
+									sample += 1;
+									OutputSteps next = new OutputSteps(Editor, start+sample/Framerate);
+									
+									//Write Sequence
+									S.WriteLine(sequence.ToString());
+
+									if(current.Frame.Index+2 != next.Frame.Index) {
+										Debug.Log("Oups! Something went wrong with frame sampling from " + current.Frame.Index + " to " + next.Frame.Index + " at target framerate " + Framerate + ". This should not have happened!");
+									}
+									
+									//Input
+									//Auto-Regressive Posture
+									for(int k=0; k<current.Posture.Length; k++) {
+										X.Feed(current.Posture[k].GetPosition().GetRelativePositionTo(current.Root), "Bone"+(k+1)+Editor.GetActor().Bones[k].GetName()+"Position");
+										X.Feed(current.Posture[k].GetForward().GetRelativeDirectionTo(current.Root), "Bone"+(k+1)+Editor.GetActor().Bones[k].GetName()+"Forward");
+										X.Feed(current.Posture[k].GetUp().GetRelativeDirectionTo(current.Root), "Bone"+(k+1)+Editor.GetActor().Bones[k].GetName()+"Up");
+										X.Feed(current.Velocities[k].GetRelativeDirectionTo(current.Root), "Bone"+(k+1)+Editor.GetActor().Bones[k].GetName()+"Velocity");
+									}
+
+									//Auto-Regressive Trajectory
+									for(int k=0; k<current.TimeSeries.Samples.Length; k++) {
+										X.FeedXZ(current.RootSeries.GetPosition(k).GetRelativePositionTo(current.Root), "Trajectory"+(k+1)+"Position");
+										X.FeedXZ(current.RootSeries.GetDirection(k).GetRelativeDirectionTo(current.Root), "Trajectory"+(k+1)+"Direction");
+										for(int c=0; c<Styles.Count; c++) {
+											X.Feed(Styles[c].Filter(current.StyleSeries.Values[k]), "Trajectory"+(k+1)+"Style"+"-"+Styles[c].GetID());
+										}
+									}
+
+									//Auto-Regressive Feet Trajectories
+									//If there is a contact, post-process point depending on tread variation, otherwise leave it as is
+									ContactModule CModule = (ContactModule)Editor.GetData().GetModule(Module.ID.Contact);
+									Vector3 leftFootTrajectoryPos = Vector3.zero;
+									Vector3 rightFootTrajectoryPos = Vector3.zero;
+									float[] leftContacts = new float[0];
+									float[] rightContacts = new float[0]; //new float[current.TimeSeries.Samples.Length];
+									/*if(Editor.Mirror){
+										leftContacts = CModule.GetSensor("LeftAnkle").InverseContacts;
+										rightContacts = CModule.GetSensor("RightAnkle").InverseContacts;
+									}else{
+										leftContacts = CModule.GetSensor("LeftAnkle").RegularContacts;
+										rightContacts = CModule.GetSensor("RightAnkle").RegularContacts;
+									}*/
+									for(int k=0; k<current.TimeSeries.Samples.Length; k++) {
+										leftContacts = current.ContactSeries.GetContacts(k, "LeftAnkle");
+										if(leftContacts[0] > 0f){
+											leftFootTrajectoryPos = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), current.FeetSeries.GetLeftFootPosition(k), Editor.Mirror);
+										}else{
+											leftFootTrajectoryPos = current.FeetSeries.GetLeftFootPosition(k);
+										}
+										//Debug.Log("LeftFoot input = " + leftFootTrajectoryPos);
+										X.Feed(leftFootTrajectoryPos.GetRelativePositionTo(current.Root), "LeftFootTrajectory"+(k+1)+"Position");
+										//X.Feed(current.FeetSeries.GetLeftFootDirection(k).GetRelativeDirectionTo(current.Root), "LeftFootTrajectory"+(k+1)+"Direction");
+										rightContacts = current.ContactSeries.GetContacts(k, "RightAnkle");
+										if(rightContacts[0] > 0f){
+											rightFootTrajectoryPos = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), current.FeetSeries.GetRightFootPosition(k), Editor.Mirror);
+										}else{
+											rightFootTrajectoryPos = current.FeetSeries.GetRightFootPosition(k);
+										}
+										//Debug.Log("RightFoot input = " + rightFootTrajectoryPos);
+										X.Feed(rightFootTrajectoryPos.GetRelativePositionTo(current.Root), "RightFootTrajectory"+(k+1)+"Position");
+										//X.Feed(current.FeetSeries.GetRightFootDirection(k).GetRelativeDirectionTo(current.Root), "RightFootTrajectory"+(k+1)+"Direction");
+									}
+
+									//Goals
+									for(int k=0; k<current.TimeSeries.Samples.Length; k++) {
+										X.Feed(current.GoalSeries.Transformations[k].GetPosition().GetRelativePositionTo(current.Root), "GoalPosition"+"-"+(k+1));
+										X.Feed(current.GoalSeries.Transformations[k].GetForward().GetRelativeDirectionTo(current.Root), "GoalDirection"+"-"+(k+1));
+										for(int c=0; c<Actions.Count; c++) {
+											X.Feed(Actions[c].Filter(current.GoalSeries.Values[k]), "Action"+(k+1)+"-"+Actions[c].GetID());
+										}
+									}
+
+									/*//Feet Goals (Preprocessing with current Step Offset before writing)
+									ContactModule CModule = (ContactModule)Editor.GetData().GetModule(Module.ID.Contact);
+									ContactModule.Sensor LeftAnkleSensor = CModule.GetSensor("LeftAnkle");
+									ContactModule.Sensor RightAnkleSensor = CModule.GetSensor("RightAnkle");
+									for(int k=0; k<current.TimeSeries.Samples.Length; k++) {
+										Vector3 LeftFutureGoalPoint = current.FeetSeries.GetFutureLeftFootPosition(k);
+										Vector3 LeftHorizontalOffset = LeftAnkleSensor.GetHorizontalStepOffsetVector(current.Frame, Editor.Mirror);
+										LeftFutureGoalPoint.y = Utility.GetHeight(LeftFutureGoalPoint, LayerMask.GetMask("Ground","Interaction")); // Adapting according to vertical noise
+										X.Feed((LeftFutureGoalPoint + LeftHorizontalOffset).GetRelativePositionTo(current.Root), "FutureLeftFootGoalPosition"+"-"+(k+1));
+										X.FeedXZ(current.FeetSeries.GetFutureLeftFootDirection(k).GetRelativeDirectionTo(current.Root), "FutureLeftFootGoalDirection"+"-"+(k+1));
+										//Debug.Log("Motion exporter Left Future Goal Direction "  + k + " = " + current.FeetSeries.GetFutureLeftFootDirection(k));
+										Vector3 RightFutureGoalPoint = current.FeetSeries.GetFutureRightFootPosition(k);
+										Vector3 RightHorizontalOffset = RightAnkleSensor.GetHorizontalStepOffsetVector(current.Frame, Editor.Mirror);
+										RightFutureGoalPoint.y = Utility.GetHeight(LeftFutureGoalPoint, LayerMask.GetMask("Ground","Interaction"));
+										X.Feed((RightFutureGoalPoint + RightHorizontalOffset).GetRelativePositionTo(current.Root), "FutureRightFootGoalPosition"+"-"+(k+1));
+										X.FeedXZ(current.FeetSeries.GetFutureRightFootDirection(k).GetRelativeDirectionTo(current.Root), "FutureRightFootGoalDirection"+"-"+(k+1));
+										//Debug.Log("Motion exporter Right Future Goal Direction "  + k + " = " + current.FeetSeries.GetFutureRightFootDirection(k));
+										//X.Feed(current.GoalSeries.Transformations[k].GetPosition().GetRelativePositionTo(current.Root), "GoalPosition"+"-"+(k+1));
+										//X.Feed(current.GoalSeries.Transformations[k].GetForward().GetRelativeDirectionTo(current.Root), "GoalDirection"+"-"+(k+1));
+									}*/
+
+
+									if(UseHeightMap){
+										//Height map
+										for(int k=0; k<current.EnvironmentMap.Points.Length; k++) {
+											X.Feed(current.EnvironmentMap.Points[k].GetRelativePositionTo(current.Root), "HeightMapPoint"+(k+1));
+										}
+									}else{
+										//Environment Geometry
+										X.Feed(current.Environment.Occupancies, "Environment-");
+									}
+
+									/*//Interaction Geometry
+									for(int k=0; k<current.Interaction.Points.Length; k++) {
+										X.Feed(current.Interaction.References[k].GetRelativePositionTo(current.Root), "InteractionPosition"+(k+1));
+										X.Feed(current.Interaction.Occupancies[k], "InteractionOccupancy"+(k+1));
+									}*/
+
+									//Gating Variables
+									X.Feed(GenerateGatingInteractionSteps(current), "Gating-");
+
+									//Output
+									//Auto-Regressive Posture
+									for(int k=0; k<next.Posture.Length; k++) {
+										Y.Feed(next.Posture[k].GetPosition().GetRelativePositionTo(current.Root), "Bone"+(k+1)+Editor.GetActor().Bones[k].GetName()+"Position");
+										Y.Feed(next.Posture[k].GetForward().GetRelativeDirectionTo(current.Root), "Bone"+(k+1)+Editor.GetActor().Bones[k].GetName()+"Forward");
+										Y.Feed(next.Posture[k].GetUp().GetRelativeDirectionTo(current.Root), "Bone"+(k+1)+Editor.GetActor().Bones[k].GetName()+"Up");
+										Y.Feed(next.Velocities[k].GetRelativeDirectionTo(current.Root), "Bone"+(k+1)+Editor.GetActor().Bones[k].GetName()+"Velocity");
+									}
+
+									//Inverse Posture
+									for(int k=0; k<next.Posture.Length; k++) {
+										Y.Feed(next.Posture[k].GetPosition().GetRelativePositionTo(current.RootSeries.Transformations.Last()), "InverseBone"+(k+1)+Editor.GetActor().Bones[k].GetName()+"Position");
+									}
+
+									//Auto-Regressive Feet Trajectories
+									leftFootTrajectoryPos = Vector3.zero;
+									rightFootTrajectoryPos = Vector3.zero;
+									for(int k=next.TimeSeries.Pivot; k<next.TimeSeries.Samples.Length; k++) {
+										leftContacts = next.ContactSeries.GetContacts(k, "LeftAnkle");
+										if(leftContacts[0] > 0f){
+											leftFootTrajectoryPos = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), next.FeetSeries.GetLeftFootPosition(k), Editor.Mirror);
+										}else{
+											leftFootTrajectoryPos = next.FeetSeries.GetLeftFootPosition(k);
+										}
+										//Debug.Log("LeftFoot output = " + leftFootTrajectoryPos);
+										Y.Feed(leftFootTrajectoryPos.GetRelativePositionTo(current.Root), "LeftFootTrajectory"+(k+1)+"Position");
+										//Y.Feed(next.FeetSeries.GetLeftFootDirection(k).GetRelativeDirectionTo(current.Root), "LeftFootTrajectory"+(k+1)+"Direction");
+										rightContacts = next.ContactSeries.GetContacts(k, "RightAnkle");
+										if(rightContacts[0] > 0f){
+											rightFootTrajectoryPos = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), next.FeetSeries.GetRightFootPosition(k), Editor.Mirror);
+										}else{
+											rightFootTrajectoryPos = next.FeetSeries.GetRightFootPosition(k);
+										}
+										//Debug.Log("RightFoot output = " + rightFootTrajectoryPos);
+										Y.Feed(rightFootTrajectoryPos.GetRelativePositionTo(current.Root), "RightFootTrajectory"+(k+1)+"Position");
+										//Y.Feed(next.FeetSeries.GetRightFootDirection(k).GetRelativeDirectionTo(current.Root), "RightFootTrajectory"+(k+1)+"Direction");
+									}
+
+									//Auto-Regressive Trajectory
+									for(int k=next.TimeSeries.Pivot; k<next.TimeSeries.Samples.Length; k++) {
+										Y.FeedXZ(next.RootSeries.GetPosition(k).GetRelativePositionTo(current.Root), "Trajectory"+(k+1)+"Position");
+										Y.FeedXZ(next.RootSeries.GetDirection(k).GetRelativeDirectionTo(current.Root), "Trajectory"+(k+1)+"Direction");
+										for(int c=0; c<Styles.Count; c++) {
+											Y.Feed(Styles[c].Filter(next.StyleSeries.Values[k]), "Trajectory"+(k+1)+"Style"+"-"+Styles[c].GetID());
+										}
+									}
+
+									//Inverse Trajectory
+									for(int k=next.TimeSeries.Pivot; k<next.TimeSeries.Samples.Length; k++) {
+										Y.FeedXZ(next.RootSeries.Transformations[k].GetPosition().GetRelativePositionTo(current.GoalSeries.Transformations[next.TimeSeries.Pivot]), "InverseTrajectoryPosition"+"-"+(k+1));
+										Y.FeedXZ(next.RootSeries.Transformations[k].GetForward().GetRelativeDirectionTo(current.GoalSeries.Transformations[next.TimeSeries.Pivot]), "InverseTrajectoryDirection"+"-"+(k+1));
+									}
+
+									//Goals
+									for(int k=0; k<next.TimeSeries.Samples.Length; k++) {
+										Y.Feed(next.GoalSeries.Transformations[k].GetPosition().GetRelativePositionTo(current.Root), "GoalPosition"+"-"+(k+1));
+										Y.Feed(next.GoalSeries.Transformations[k].GetForward().GetRelativeDirectionTo(current.Root), "GoalDirection"+"-"+(k+1));
+										for(int c=0; c<Actions.Count; c++) {
+											Y.Feed(Actions[c].Filter(next.GoalSeries.Values[k]), "Action"+(k+1)+"-"+Actions[c].GetID());
+										}
+									}
+
+									/*//Feet Goals (Preprocessing with current Step Offset before writing)
+									for(int k=0; k<next.TimeSeries.Samples.Length; k++) {
+										Vector3 LeftFutureGoalPoint = next.FeetSeries.GetFutureLeftFootPosition(k);
+										Vector3 LeftHorizontalOffset = LeftAnkleSensor.GetHorizontalStepOffsetVector(next.Frame, Editor.Mirror);
+										LeftFutureGoalPoint.y = Utility.GetHeight(LeftFutureGoalPoint, LayerMask.GetMask("Ground","Interaction")); // Adapting according to vertical noise
+										Y.Feed((LeftFutureGoalPoint + LeftHorizontalOffset).GetRelativePositionTo(current.Root), "FutureLeftFootGoalPosition"+"-"+(k+1));
+										Y.FeedXZ(next.FeetSeries.GetFutureLeftFootDirection(k).GetRelativeDirectionTo(current.Root), "FutureLeftFootGoalDirection"+"-"+(k+1));
+										//Debug.Log("Motion exporter Left Future Goal Direction "  + k + " = " + next.FeetSeries.GetFutureLeftFootDirection(k));
+										Vector3 RightFutureGoalPoint = next.FeetSeries.GetFutureRightFootPosition(k);
+										Vector3 RightHorizontalOffset = RightAnkleSensor.GetHorizontalStepOffsetVector(next.Frame, Editor.Mirror);
+										RightFutureGoalPoint.y = Utility.GetHeight(LeftFutureGoalPoint, LayerMask.GetMask("Ground","Interaction"));
+										Y.Feed((RightFutureGoalPoint + RightHorizontalOffset).GetRelativePositionTo(current.Root), "FutureRightFootGoalPosition"+"-"+(k+1));
+										Y.FeedXZ(next.FeetSeries.GetFutureRightFootDirection(k).GetRelativeDirectionTo(current.Root), "FutureRightFootGoalDirection"+"-"+(k+1));
+										//Debug.Log("Motion exporter Right Future Goal Direction "  + k + " = " + next.FeetSeries.GetFutureRightFootDirection(k));
+										//X.Feed(current.GoalSeries.Transformations[k].GetPosition().GetRelativePositionTo(current.Root), "GoalPosition"+"-"+(k+1));
+										//X.Feed(current.GoalSeries.Transformations[k].GetForward().GetRelativeDirectionTo(current.Root), "GoalDirection"+"-"+(k+1));
+									}*/
+
+									//Key Contacts
+									//Y.Feed(next.ContactSeries.GetContacts(next.TimeSeries.Pivot, "Hips", "RightWrist", "LeftWrist", "RightAnkle", "LeftAnkle"), "Contact-");
+									Y.Feed(next.ContactSeries.GetContacts(next.TimeSeries.Pivot, "RightAnkle", "LeftAnkle", "RightWrist", "LeftWrist"), "Contact-");
+
+									//Phase Update
+									List<float> values = new List<float>();
+									values.Add(current.PhaseSeries.Values[current.TimeSeries.Pivot]);
+									for(int k=next.TimeSeries.Pivot; k<next.TimeSeries.Samples.Length; k++) {
+										values.Add(next.PhaseSeries.Values[k]);
+										Y.Feed(Utility.PhaseUpdate(values.ToArray()), "PhaseUpdate-"+(k+1));
+									}
+
+									//Write Line
+									X.Store();
+									Y.Store();
+
+									Progress = (sample/Framerate) / (end-start);
+									total += 1;
+									items += 1;
+									if(items >= BatchSize) {
+										Performance = items / (float)Utility.GetElapsedTime(timestamp);
+										timestamp = Utility.GetTimestamp();
+										items = 0;
+										yield return new WaitForSeconds(0f);
+									}
+								}
+
+								//Reset Progress
+								Progress = 0f;
+
+								//Collect Garbage
+								EditorUtility.UnloadUnusedAssetsImmediate();
+								Resources.UnloadUnusedAssets();
+								GC.Collect();
+							}
+						}
+					}
+				}
+			}
+			Editor.Save = editorSave;
+			Editor.SetMirror(editorMirror);
+			Editor.SetTargetFramerate(editorRate);
+			Editor.SetRandomSeed(editorSeed);
+
+			S.Close();
+
+			X.Finish();
+			Y.Finish();
+
+			Index = -1;
+			Exporting = false;
+			yield return new WaitForSeconds(0f);
+
+			Debug.Log("Exported " + total + " samples.");
+		}
+	}
+
 	private float[] GenerateGatingInteractionSIGGRAPHAsia(InputSIGGRAPHAsia current) {
+		List<float> values = new List<float>();
+		for(int i=0; i<current.TimeSeries.Samples.Length; i++) {
+			Vector2 phase = Utility.PhaseVector(current.PhaseSeries.Values[i]);
+			for(int j=0; j<Styles.Count; j++) {
+				float magnitude = Styles[j].Filter(current.StyleSeries.Values[i]);
+				magnitude = Utility.Normalise(magnitude, 0f, 1f, -1f, 1f);
+				values.Add(magnitude * phase.x);
+				values.Add(magnitude * phase.y);
+			}
+			for(int j=0; j<Actions.Count; j++) {
+				float magnitude = Actions[j].Filter(current.GoalSeries.Values[i]);
+				magnitude = Utility.Normalise(magnitude, 0f, 1f, -1f, 1f);
+				Matrix4x4 root = current.RootSeries.Transformations[i];
+				root[1,3] = 0f;
+				Matrix4x4 goal = current.GoalSeries.Transformations[i];
+				goal[1,3] = 0f;
+				float distance = Vector3.Distance(root.GetPosition(), goal.GetPosition());
+				float angle = Quaternion.Angle(root.GetRotation(), goal.GetRotation());
+				values.Add(magnitude * phase.x);
+				values.Add(magnitude * phase.y);
+				values.Add(magnitude * distance * phase.x);
+				values.Add(magnitude * distance * phase.y);
+				values.Add(magnitude * angle * phase.x);
+				values.Add(magnitude * angle * phase.y);
+			}
+		}
+		return values.ToArray();
+	}
+
+	private float[] GenerateGatingInteractionSteps(InputSteps current) {
 		List<float> values = new List<float>();
 		for(int i=0; i<current.TimeSeries.Samples.Length; i++) {
 			Vector2 phase = Utility.PhaseVector(current.PhaseSeries.Values[i]);
@@ -849,6 +1212,73 @@ public class MotionExporter : EditorWindow {
 			Velocities = editor.GetActor().GetBoneVelocities();
 			TimeSeries = ((TimeSeriesModule)editor.GetData().GetModule(Module.ID.TimeSeries)).GetTimeSeries(Frame, editor.Mirror, 6, 6, 1f, 1f, 1, 1f/editor.TargetFramerate);
 			RootSeries = (TimeSeries.Root)TimeSeries.GetSeries("Root");
+			StyleSeries = (TimeSeries.Style)TimeSeries.GetSeries("Style");
+			GoalSeries = (TimeSeries.Goal)TimeSeries.GetSeries("Goal");
+			ContactSeries = (TimeSeries.Contact)TimeSeries.GetSeries("Contact");
+			PhaseSeries = (TimeSeries.Phase)TimeSeries.GetSeries("Phase");
+		}
+	}
+
+	public class InputSteps {
+		public Frame Frame;
+		public Matrix4x4 Root;
+		public Matrix4x4[] Posture;
+		public Vector3[] Velocities;
+		public TimeSeries TimeSeries;
+		public TimeSeries.Root RootSeries;
+		public TimeSeries.Feet FeetSeries;
+		public TimeSeries.Style StyleSeries;
+		public TimeSeries.Goal GoalSeries;
+		public TimeSeries.Contact ContactSeries;
+		public TimeSeries.Phase PhaseSeries;
+		public CylinderMap Environment;
+		public CuboidMap Interaction;
+		public HeightMap EnvironmentMap;
+
+		public InputSteps(MotionEditor editor, float timestamp) {
+			editor.LoadFrame(timestamp);
+			Frame = editor.GetCurrentFrame();
+
+			Root = editor.GetActor().GetRoot().GetWorldMatrix(true);
+			Posture = editor.GetActor().GetBoneTransformations();
+			Velocities = editor.GetActor().GetBoneVelocities();
+			TimeSeries = ((TimeSeriesModule)editor.GetData().GetModule(Module.ID.TimeSeries)).GetTimeSeries(Frame, editor.Mirror, 6, 6, 1f, 1f, 1, 1f/editor.TargetFramerate);
+			RootSeries = (TimeSeries.Root)TimeSeries.GetSeries("Root");
+			FeetSeries = (TimeSeries.Feet)TimeSeries.GetSeries("Feet");
+			StyleSeries = (TimeSeries.Style)TimeSeries.GetSeries("Style");
+			GoalSeries = (TimeSeries.Goal)TimeSeries.GetSeries("Goal");
+			ContactSeries = (TimeSeries.Contact)TimeSeries.GetSeries("Contact");
+			PhaseSeries = (TimeSeries.Phase)TimeSeries.GetSeries("Phase");
+
+			Environment = ((CylinderMapModule)editor.GetData().GetModule(Module.ID.CylinderMap)).GetCylinderMap(editor, Frame, editor.Mirror);
+			EnvironmentMap = ((HeightMapModule)editor.GetData().GetModule(Module.ID.HeightMap)).GetHeightMap(editor.GetActor());
+			//Interaction = ((GoalModule)editor.GetData().GetModule(Module.ID.Goal)).Target.GetInteractionGeometry(Frame, editor.Mirror, 1f/editor.TargetFramerate);
+		}
+	}
+
+	public class OutputSteps {
+		public Frame Frame;
+		public Matrix4x4 Root;
+		public Matrix4x4[] Posture;
+		public Vector3[] Velocities;
+		public TimeSeries TimeSeries;
+		public TimeSeries.Root RootSeries;
+		public TimeSeries.Feet FeetSeries;
+		public TimeSeries.Style StyleSeries;
+		public TimeSeries.Goal GoalSeries;
+		public TimeSeries.Contact ContactSeries;
+		public TimeSeries.Phase PhaseSeries;
+
+		public OutputSteps(MotionEditor editor, float timestamp) {
+			editor.LoadFrame(timestamp);
+			Frame = editor.GetCurrentFrame();
+			
+			Root = editor.GetActor().GetRoot().GetWorldMatrix(true);
+			Posture = editor.GetActor().GetBoneTransformations();
+			Velocities = editor.GetActor().GetBoneVelocities();
+			TimeSeries = ((TimeSeriesModule)editor.GetData().GetModule(Module.ID.TimeSeries)).GetTimeSeries(Frame, editor.Mirror, 6, 6, 1f, 1f, 1, 1f/editor.TargetFramerate);
+			RootSeries = (TimeSeries.Root)TimeSeries.GetSeries("Root");
+			FeetSeries = (TimeSeries.Feet)TimeSeries.GetSeries("Feet");
 			StyleSeries = (TimeSeries.Style)TimeSeries.GetSeries("Style");
 			GoalSeries = (TimeSeries.Goal)TimeSeries.GetSeries("Goal");
 			ContactSeries = (TimeSeries.Contact)TimeSeries.GetSeries("Contact");

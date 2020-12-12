@@ -37,9 +37,9 @@ public class TimeSeriesModule : Module {
 				((TimeSeries.Root)series).Draw();
 			}
 			if(series is TimeSeries.Feet){
-				RootModule m = (RootModule)Data.GetModule(ID.Root);
+				ContactModule m = (ContactModule)Data.GetModule(ID.Contact);
 				if(m.useSteps){
-					((TimeSeries.Feet)series).Draw();
+					((TimeSeries.Feet)series).Draw(editor);
 				}
 			}
 			if(series is TimeSeries.Style && Data.GetModule(ID.Style).Visualise) {
@@ -94,7 +94,7 @@ public class TimeSeriesModule : Module {
 						series.Velocities[i] = m.GetRootVelocity(Data.GetFrame(t), mirrored, delta);
 					}
 				}
-				if(m.useSteps){
+				/*if(m.useSteps){
 					TimeSeries.Feet seriesFeet = new TimeSeries.Feet(timeSeries);
 					for(int i=0; i<timeSeries.Samples.Length; i++) {
 						float t = frame.Timestamp + timeSeries.Samples[i].Timestamp;
@@ -110,7 +110,7 @@ public class TimeSeriesModule : Module {
 							seriesFeet.RightFootVelocities[i] = m.GetRightFootVelocity(Data.GetFrame(t), mirrored, delta);
 						}
 					}
-				}
+				}*/
 			}
 			/*if(module is FeetModule) {
 				RootModule m = (RootModule)module;
@@ -147,9 +147,31 @@ public class TimeSeriesModule : Module {
 			if(module is ContactModule) {
 				ContactModule m = (ContactModule)module;
 				TimeSeries.Contact series = new TimeSeries.Contact(timeSeries, m.GetNames());
+				//TimeSeries.Feet seriesFeet = new TimeSeries.Feet(timeSeries);
 				for(int i=0; i<timeSeries.Samples.Length; i++) {
 					float t = frame.Timestamp + timeSeries.Samples[i].Timestamp;
 					series.Values[i] = m.GetContacts(Data.GetFrame(t), mirrored);
+				}
+				if(m.useSteps){
+					TimeSeries.Feet seriesFeet = new TimeSeries.Feet(timeSeries);
+					for(int i=0; i<timeSeries.Samples.Length; i++) {
+						float t = frame.Timestamp + timeSeries.Samples[i].Timestamp;
+						seriesFeet.FutureLeftFootGoalPoints[i] = m.GetSensor("LeftAnkle").GetFutureGoalPoint(Data.GetFrame(t), mirrored);
+						seriesFeet.FutureLeftFootGoalDirections[i] = m.GetSensor("LeftAnkle").GetFutureGoalDirection(Data.GetFrame(t), mirrored);
+						seriesFeet.FutureRightFootGoalPoints[i] = m.GetSensor("RightAnkle").GetFutureGoalPoint(Data.GetFrame(t), mirrored);
+						seriesFeet.FutureRightFootGoalDirections[i] = m.GetSensor("RightAnkle").GetFutureGoalDirection(Data.GetFrame(t), mirrored);
+						if(t < 0f || t > Data.GetTotalTime()) {
+							seriesFeet.LeftFootTransformations[i] = m.GetEstimatedLeftFootTransformation(frame, timeSeries.Samples[i].Timestamp, mirrored);
+							seriesFeet.LeftFootVelocities[i] = m.GetEstimatedLeftFootVelocity(frame, timeSeries.Samples[i].Timestamp, mirrored, delta);
+							seriesFeet.RightFootTransformations[i] = m.GetEstimatedRightFootTransformation(frame, timeSeries.Samples[i].Timestamp, mirrored);
+							seriesFeet.RightFootVelocities[i] = m.GetEstimatedRightFootVelocity(frame, timeSeries.Samples[i].Timestamp, mirrored, delta);
+						} else {
+							seriesFeet.LeftFootTransformations[i] = m.GetLeftFootTransformation(Data.GetFrame(t), mirrored);
+							seriesFeet.LeftFootVelocities[i] = m.GetLeftFootVelocity(Data.GetFrame(t), mirrored, delta);
+							seriesFeet.RightFootTransformations[i] = m.GetRightFootTransformation(Data.GetFrame(t), mirrored);
+							seriesFeet.RightFootVelocities[i] = m.GetRightFootVelocity(Data.GetFrame(t), mirrored, delta);
+						}
+					}
 				}
 			}
 			if(module is PhaseModule) {
