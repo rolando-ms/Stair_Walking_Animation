@@ -28,6 +28,8 @@ public class FeetProjection : MonoBehaviour
     private int CounterLeftCorrectPoints = 0;
     private int CounterRightPoints = 0;
     private int CounterRightCorrectPoints = 0;
+    private int CounterLeftAreaPoints = 0;
+    private int CounterRightAreaPoints = 0;
 
     // Start is called before the first frame update
     void Start()
@@ -116,6 +118,9 @@ public class FeetProjection : MonoBehaviour
             Matrix4x4 RightAnkle = actor.GetBoneTransformation("RightAnkle");
             Matrix4x4 RightToe = actor.GetBoneTransformation("RightToe");
 
+            Vector3 LeftAnkleVelocity = actor.GetBoneVelocity("LeftAnkle");
+            Vector3 RightAnkleVelocity = actor.GetBoneVelocity("RightAnkle");
+
             /*****************************************************************************************************
             Feet Projection
             ******************************************************************************************************/
@@ -162,65 +167,13 @@ public class FeetProjection : MonoBehaviour
 
             Vector3 RightAnkleToe = RightToe.GetPosition() - RightAnkleOffsettedDown;
             Vector3 RightAnkleToeUnitNormal = Vector3.Cross(RightAnkleToe, RightToe.GetRight()).normalized;
-            DrawPlane(RightAnkleOffsettedDown, RightAnkleToeUnitNormal);
+            //DrawPlane(RightAnkleOffsettedDown, RightAnkleToeUnitNormal);
             Plane RightAnkleToePlane = new Plane(RightAnkleToeUnitNormal, RightAnkleOffsettedDown);
 
             //DrawPlane(LeftAnkle.GetPosition(), LeftAnkleToeUnitNormal);
             //Debug.DrawRay(LeftPointsMap[0].GetRelativePositionFrom(LeftPivot), Vector3.up, Color.blue);
             //float distanceToPlane = LeftAnkleToePlane.GetDistanceToPoint(LeftPointsMap[0].GetRelativePositionFrom(LeftPivot));
             //Debug.Log("Distance to plane = " + distanceToPlane);
-            float LeftTransparentValue = 0f;
-            float RightTransparentValue = 0f;
-            float ToeOffset = 0.0f;
-            CounterLeftPoints = 0;
-            CounterLeftCorrectPoints = 0;
-            CounterRightPoints = 0;
-            CounterRightCorrectPoints = 0;
-
-            for(int i = 0; i < LeftPointsMap.Length; i++){
-                if(ShowProjection){
-                    Vector3 LeftPointAtToeHeight = LeftPointsMap[i].GetRelativePositionFrom(LeftPivot);
-                    LeftPointAtToeHeight[1] = LeftToe.GetPosition().y;
-                    if(Vector3.Distance(LeftAnkleAtToeHeight, LeftToe.GetPosition()) > Vector3.Distance(LeftAnkleAtToeHeight, LeftPointAtToeHeight) - ToeOffset){
-                        LeftTransparentValue = 1f;
-                        CounterLeftPoints += 1;
-                    }else{
-                        LeftTransparentValue = 0f;
-                    }
-                    //float height = LeftPointsMap[i].y;
-                    if(LeftAnkleToePlane.GetDistanceToPoint(LeftPoints[i])<=0f){
-                        LeftFootProjection.DrawFootPoint(UltiDraw.Blue.Transparent(LeftTransparentValue), i);
-                        if(LeftTransparentValue > 0f){
-                            CounterLeftCorrectPoints += 1;
-                        }
-                    }else{
-                        LeftFootProjection.DrawFootPoint(UltiDraw.Red.Transparent(LeftTransparentValue), i);
-                    }
-                    
-
-                    Vector3 RightPointAtToeHeight = RightPointsMap[i].GetRelativePositionFrom(RightPivot);
-                    RightPointAtToeHeight[1] = RightToe.GetPosition().y;
-                    if(Vector3.Distance(RightAnkleAtToeHeight, RightToe.GetPosition()) > Vector3.Distance(RightAnkleAtToeHeight, RightPointAtToeHeight) - ToeOffset){
-                        RightTransparentValue = 1f;
-                        CounterRightPoints += 1;
-                    }else{
-                        RightTransparentValue = 0f;
-                    }
-                    //float height = LeftPointsMap[i].y;
-                    if(RightAnkleToePlane.GetDistanceToPoint(RightPoints[i])<=0f){
-                        RightFootProjection.DrawFootPoint(UltiDraw.Green.Transparent(RightTransparentValue), i);
-                        if(RightTransparentValue > 0f){
-                            CounterRightCorrectPoints += 1;
-                        }
-                    }else{
-                        RightFootProjection.DrawFootPoint(UltiDraw.Red.Transparent(RightTransparentValue), i);
-                    }
-                    //LeftFootProjection.DrawFootPoint(UltiDraw.Blue.Transparent(1f), i);
-                    //RightFootProjection.DrawFootPoint(UltiDraw.Green.Transparent(1f), i);
-                }
-            }
-            //LeftFootProjection.DrawFootMap(UltiDraw.Blue.Transparent(1f));
-            //RightFootProjection.DrawFootMap(UltiDraw.Green.Transparent(1f));
 
             /*****************************************************************************************************
             Feet Center Point
@@ -239,40 +192,107 @@ public class FeetProjection : MonoBehaviour
             RaycastHit hit;
 		    Physics.Raycast(new Vector3(LeftFootCenter.x, 100f, LeftFootCenter.z), Vector3.down, out hit, float.PositiveInfinity, LayerMask.GetMask("Ground"));
             float LeftCenterFootHeight = LeftFootCenterPlane.GetDistanceToPoint(hit.point); //Vector3.Distance(LeftFootCenter, hit.point);
-            /*if(Mathf.Abs(LeftCenterFootHeight) < 0.0001f){
-                LeftCenterFootHeight = 0f;
-            }*/
-            //Debug.Log("Left Foot Height = " + LeftCenterFootHeight);
-            //Write 3 columns: Projection Points | Correctly projected points | Foot Center Distance to Ground | 3d Center Foot point
-            LeftFootData.WriteLine(CounterLeftPoints + " " + CounterLeftCorrectPoints + " " + 
-                                    LeftCenterFootHeight.ToString("F5",new CultureInfo("en-US")) + " " + 
-                                    LeftFootCenter.x.ToString("F5",new CultureInfo("en-US")) + " " + 
-                                    LeftFootCenter.y.ToString("F5",new CultureInfo("en-US")) + " " + 
-                                    LeftFootCenter.z.ToString("F5",new CultureInfo("en-US")));
+            float LeftCenterFootGlobalHeight = hit.point.y;
 
             //Vector3 RightAnkleOffsettedDown = RightAnkle.GetPosition() + AnkleOffset*RightAnkle.GetUp();
             Vector3 RightAnkleOffsetedDownToToe = RightToe.GetPosition() - RightAnkleOffsettedDown;
             float RightDistance = Vector3.Distance(RightToe.GetPosition(),RightAnkleOffsettedDown);
             Vector3 RightFootCenter = RightAnkle.GetPosition() + (RightDistance/2f)*RightAnkleOffsetedDownToToe.normalized;
-            Debug.DrawRay(RightFootCenter, Vector3.up, Color.blue);
+            //Debug.DrawRay(RightFootCenter, Vector3.up, Color.blue);
             Vector3 RightFootCenterToeNorm = Vector3.Cross(RightToe.GetRight(), RightAnkleOffsetedDownToToe);
             
             //DrawPlane(RightFootCenter, RightFootCenterToeNorm, Color.blue);
             
             Plane RightFootCenterPlane = new Plane(RightFootCenterToeNorm, RightFootCenter);
-            //RaycastHit hit;
 		    Physics.Raycast(new Vector3(RightFootCenter.x, 100f, RightFootCenter.z), Vector3.down, out hit, float.PositiveInfinity, LayerMask.GetMask("Ground"));
             float RightCenterFootHeight = RightFootCenterPlane.GetDistanceToPoint(hit.point); //Vector3.Distance(RightFootCenter, hit.point);
-            //Debug.Log("Right Foot Height = " + RightCenterFootHeight);
-            /*if(Mathf.Abs(RightCenterFootHeight) < 0.0001f){
-                RightCenterFootHeight = 0f;
-            }*/
-            //Write 3 columns: Projection Points | Correctly projected points | Foot Center Distance to Ground
+            float RightCenterFootGlobalHeight = hit.point.y;
+
+            //*****************************************************************************************************
+
+            float LeftTransparentValue = 0f;
+            float RightTransparentValue = 0f;
+            float ToeOffset = 0.0f;
+            CounterLeftPoints = 0;
+            CounterLeftCorrectPoints = 0;
+            CounterRightPoints = 0;
+            CounterRightCorrectPoints = 0;
+            CounterLeftAreaPoints = 0;
+            CounterRightAreaPoints = 0;
+
+            for(int i = 0; i < LeftPointsMap.Length; i++){
+                if(ShowProjection){
+                    Vector3 LeftPointAtToeHeight = LeftPointsMap[i].GetRelativePositionFrom(LeftPivot);
+                    float LeftPointGlobalHeight = Utility.GetHeight(LeftPointsMap[i].GetRelativePositionFrom(LeftPivot), LayerMask.GetMask("Ground","Interaction"));
+                    LeftPointAtToeHeight[1] = LeftToe.GetPosition().y;
+                    if(Vector3.Distance(LeftAnkleAtToeHeight, LeftToe.GetPosition()) > Vector3.Distance(LeftAnkleAtToeHeight, LeftPointAtToeHeight) - ToeOffset){
+                        LeftTransparentValue = 1f;
+                        CounterLeftPoints += 1;
+                        if(LeftPointGlobalHeight == LeftCenterFootGlobalHeight){
+                            CounterLeftAreaPoints += 1;
+                        }
+                    }else{
+                        LeftTransparentValue = 0f;
+                    }
+                    //float height = LeftPointsMap[i].y;
+                    if(LeftAnkleToePlane.GetDistanceToPoint(LeftPoints[i])<=0f){
+                        LeftFootProjection.DrawFootPoint(UltiDraw.Blue.Transparent(LeftTransparentValue), i);
+                        if(LeftTransparentValue > 0f){
+                            CounterLeftCorrectPoints += 1;
+                        }
+                    }else{
+                        LeftFootProjection.DrawFootPoint(UltiDraw.Red.Transparent(LeftTransparentValue), i);
+                    }
+                    
+
+                    Vector3 RightPointAtToeHeight = RightPointsMap[i].GetRelativePositionFrom(RightPivot);
+                    float RightPointGlobalHeight = Utility.GetHeight(RightPointsMap[i].GetRelativePositionFrom(RightPivot), LayerMask.GetMask("Ground","Interaction"));
+                    RightPointAtToeHeight[1] = RightToe.GetPosition().y;
+                    if(Vector3.Distance(RightAnkleAtToeHeight, RightToe.GetPosition()) > Vector3.Distance(RightAnkleAtToeHeight, RightPointAtToeHeight) - ToeOffset){
+                        RightTransparentValue = 1f;
+                        CounterRightPoints += 1;
+                        if(RightPointGlobalHeight == RightCenterFootGlobalHeight){
+                            CounterRightAreaPoints += 1;
+                        }
+                    }else{
+                        RightTransparentValue = 0f;
+                    }
+                    //float height = LeftPointsMap[i].y;
+                    if(RightAnkleToePlane.GetDistanceToPoint(RightPoints[i])<=0f){
+                        RightFootProjection.DrawFootPoint(UltiDraw.Green.Transparent(RightTransparentValue), i);
+                        if(RightTransparentValue > 0f){
+                            CounterRightCorrectPoints += 1;
+                        }
+                    }else{
+                        RightFootProjection.DrawFootPoint(UltiDraw.Red.Transparent(RightTransparentValue), i);
+                    }
+                    //LeftFootProjection.DrawFootPoint(UltiDraw.Blue.Transparent(1f), i);
+                    //RightFootProjection.DrawFootPoint(UltiDraw.Green.Transparent(1f), i);
+                }
+            }
+            //Debug.Log("Left Area Points = " + CounterLeftAreaPoints);
+            //Debug.Log("Right Area Points = " + CounterRightAreaPoints);
+            //LeftFootProjection.DrawFootMap(UltiDraw.Blue.Transparent(1f));
+            //RightFootProjection.DrawFootMap(UltiDraw.Green.Transparent(1f));
+
+
+            //Write columns: Projection Points | Correctly projected points | Foot Center Distance to Ground | 3d Center Foot point | Foot Velocity magnitude | Correct area points
+            LeftFootData.WriteLine(CounterLeftPoints + " " + CounterLeftCorrectPoints + " " + 
+                                    LeftCenterFootHeight.ToString("F5",new CultureInfo("en-US")) + " " + 
+                                    LeftFootCenter.x.ToString("F5",new CultureInfo("en-US")) + " " + 
+                                    LeftFootCenter.y.ToString("F5",new CultureInfo("en-US")) + " " + 
+                                    LeftFootCenter.z.ToString("F5",new CultureInfo("en-US")) + " " + 
+                                    LeftAnkleVelocity.magnitude.ToString("F5",new CultureInfo("en-US")) + " " +
+                                    CounterLeftAreaPoints);
+
+            //Write columns: Projection Points | Correctly projected points | Foot Center Distance to Ground | 3d Center Foot point | Foot Velocity magnitude | Correct area points
             RightFootData.WriteLine(CounterRightPoints + " " + CounterRightCorrectPoints + " " + 
                                     RightCenterFootHeight.ToString("F5",new CultureInfo("en-US")) + " " + 
                                     RightFootCenter.x.ToString("F5",new CultureInfo("en-US")) + " " + 
                                     RightFootCenter.y.ToString("F5",new CultureInfo("en-US")) + " " +  
-                                    RightFootCenter.z.ToString("F5",new CultureInfo("en-US")));
+                                    RightFootCenter.z.ToString("F5",new CultureInfo("en-US")) + " " +
+                                    RightAnkleVelocity.magnitude.ToString("F5",new CultureInfo("en-US")) + " " +
+                                    CounterRightAreaPoints);
 
         }
 		
