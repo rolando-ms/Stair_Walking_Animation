@@ -918,27 +918,36 @@ public class MotionExporter : EditorWindow {
 										}
 									}
 
-									/*//Feet Goals (Preprocessing with current Step Offset before writing)
-									ContactModule CModule = (ContactModule)Editor.GetData().GetModule(Module.ID.Contact);
-									ContactModule.Sensor LeftAnkleSensor = CModule.GetSensor("LeftAnkle");
-									ContactModule.Sensor RightAnkleSensor = CModule.GetSensor("RightAnkle");
-									for(int k=0; k<current.TimeSeries.Samples.Length; k++) {
+									//Feet Goals (Preprocessing with current Step Offset before writing)
+									//ContactModule CModule = (ContactModule)Editor.GetData().GetModule(Module.ID.Contact);
+									//ContactModule.Sensor LeftAnkleSensor = CModule.GetSensor("LeftAnkle");
+									//ContactModule.Sensor RightAnkleSensor = CModule.GetSensor("RightAnkle");
+									/*for(int k=0; k<current.TimeSeries.Samples.Length; k++) {
 										Vector3 LeftFutureGoalPoint = current.FeetSeries.GetFutureLeftFootPosition(k);
-										Vector3 LeftHorizontalOffset = LeftAnkleSensor.GetHorizontalStepOffsetVector(current.Frame, Editor.Mirror);
-										LeftFutureGoalPoint.y = Utility.GetHeight(LeftFutureGoalPoint, LayerMask.GetMask("Ground","Interaction")); // Adapting according to vertical noise
-										X.Feed((LeftFutureGoalPoint + LeftHorizontalOffset).GetRelativePositionTo(current.Root), "FutureLeftFootGoalPosition"+"-"+(k+1));
-										X.FeedXZ(current.FeetSeries.GetFutureLeftFootDirection(k).GetRelativeDirectionTo(current.Root), "FutureLeftFootGoalDirection"+"-"+(k+1));
+										//Vector3 LeftHorizontalOffset = LeftAnkleSensor.GetHorizontalStepOffsetVector(current.Frame, Editor.Mirror);
+										//LeftFutureGoalPoint.y = Utility.GetHeight(LeftFutureGoalPoint, LayerMask.GetMask("Ground","Interaction")); // Adapting according to vertical noise
+										LeftFutureGoalPoint = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), LeftFutureGoalPoint, Editor.Mirror);
+										X.Feed((LeftFutureGoalPoint).GetRelativePositionTo(current.Root), "FutureLeftFootGoalPosition"+"-"+(k+1));
+										//X.FeedXZ(current.FeetSeries.GetFutureLeftFootDirection(k).GetRelativeDirectionTo(current.Root), "FutureLeftFootGoalDirection"+"-"+(k+1));
 										//Debug.Log("Motion exporter Left Future Goal Direction "  + k + " = " + current.FeetSeries.GetFutureLeftFootDirection(k));
 										Vector3 RightFutureGoalPoint = current.FeetSeries.GetFutureRightFootPosition(k);
-										Vector3 RightHorizontalOffset = RightAnkleSensor.GetHorizontalStepOffsetVector(current.Frame, Editor.Mirror);
-										RightFutureGoalPoint.y = Utility.GetHeight(LeftFutureGoalPoint, LayerMask.GetMask("Ground","Interaction"));
-										X.Feed((RightFutureGoalPoint + RightHorizontalOffset).GetRelativePositionTo(current.Root), "FutureRightFootGoalPosition"+"-"+(k+1));
-										X.FeedXZ(current.FeetSeries.GetFutureRightFootDirection(k).GetRelativeDirectionTo(current.Root), "FutureRightFootGoalDirection"+"-"+(k+1));
+										//Vector3 RightHorizontalOffset = RightAnkleSensor.GetHorizontalStepOffsetVector(current.Frame, Editor.Mirror);
+										//RightFutureGoalPoint.y = Utility.GetHeight(LeftFutureGoalPoint, LayerMask.GetMask("Ground","Interaction"));
+										RightFutureGoalPoint = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), RightFutureGoalPoint, Editor.Mirror);
+										X.Feed((RightFutureGoalPoint).GetRelativePositionTo(current.Root), "FutureRightFootGoalPosition"+"-"+(k+1));
+										//X.FeedXZ(current.FeetSeries.GetFutureRightFootDirection(k).GetRelativeDirectionTo(current.Root), "FutureRightFootGoalDirection"+"-"+(k+1));
 										//Debug.Log("Motion exporter Right Future Goal Direction "  + k + " = " + current.FeetSeries.GetFutureRightFootDirection(k));
 										//X.Feed(current.GoalSeries.Transformations[k].GetPosition().GetRelativePositionTo(current.Root), "GoalPosition"+"-"+(k+1));
 										//X.Feed(current.GoalSeries.Transformations[k].GetForward().GetRelativeDirectionTo(current.Root), "GoalDirection"+"-"+(k+1));
 									}*/
 
+									//Feet Goal 3D position of current frame
+									Vector3 LeftFutureGoalPoint = current.FeetSeries.GetFutureLeftFootPosition(current.TimeSeries.Pivot);
+									LeftFutureGoalPoint = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), LeftFutureGoalPoint, Editor.Mirror);
+									X.Feed((LeftFutureGoalPoint).GetRelativePositionTo(current.Root), "FutureLeftFootGoalPosition"+"-"+(current.TimeSeries.Pivot+1));
+									Vector3 RightFutureGoalPoint = current.FeetSeries.GetFutureRightFootPosition(current.TimeSeries.Pivot);
+									RightFutureGoalPoint = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), RightFutureGoalPoint, Editor.Mirror);
+									X.Feed((RightFutureGoalPoint).GetRelativePositionTo(current.Root), "FutureRightFootGoalPosition"+"-"+(current.TimeSeries.Pivot+1));
 
 									if(UseHeightMap){
 										//Height map
@@ -1038,6 +1047,14 @@ public class MotionExporter : EditorWindow {
 										//X.Feed(current.GoalSeries.Transformations[k].GetPosition().GetRelativePositionTo(current.Root), "GoalPosition"+"-"+(k+1));
 										//X.Feed(current.GoalSeries.Transformations[k].GetForward().GetRelativeDirectionTo(current.Root), "GoalDirection"+"-"+(k+1));
 									}*/
+
+									//Feet Goal 3D position of current frame
+									LeftFutureGoalPoint = next.FeetSeries.GetFutureLeftFootPosition(next.TimeSeries.Pivot);
+									LeftFutureGoalPoint = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), LeftFutureGoalPoint, Editor.Mirror);
+									Y.Feed((LeftFutureGoalPoint).GetRelativePositionTo(current.Root), "FutureLeftFootGoalPosition"+"-"+(next.TimeSeries.Pivot+1));
+									RightFutureGoalPoint = next.FeetSeries.GetFutureRightFootPosition(next.TimeSeries.Pivot);
+									RightFutureGoalPoint = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), RightFutureGoalPoint, Editor.Mirror);
+									Y.Feed((RightFutureGoalPoint).GetRelativePositionTo(current.Root), "FutureRightFootGoalPosition"+"-"+(next.TimeSeries.Pivot+1));
 
 									//Key Contacts
 									//Y.Feed(next.ContactSeries.GetContacts(next.TimeSeries.Pivot, "Hips", "RightWrist", "LeftWrist", "RightAnkle", "LeftAnkle"), "Contact-");
