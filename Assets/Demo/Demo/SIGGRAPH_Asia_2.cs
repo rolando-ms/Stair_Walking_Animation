@@ -71,6 +71,14 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 	private bool FirstStep = true;
 	private bool LeftGoalReached = true;
 	private bool RightGoalReached = true;
+	
+	private Vector3 pastLeftGoal = Vector3.zero;
+	private Vector3 currentLeftGoal = Vector3.zero;
+	private float leftGoalVelocity = 0f;
+
+	private Vector3 pastRightGoal = Vector3.zero;
+	private Vector3 currentRightGoal = Vector3.zero;
+	private float rightGoalVelocity = 0f;
 
 	private UltimateIK.Model RightFootIK, LeftFootIK, ActorIK;
 
@@ -290,16 +298,18 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 			NeuralNetwork.Feed(GoalSeries.Values[sample.Index]);
 		}
 
-		/*if(UseSteps){
+		if(UseSteps){
 			//Input Feet Goal Positions / Directions
-			for(int i=0; i<TimeSeries.KeyCount; i++) {
+			/*for(int i=0; i<TimeSeries.KeyCount; i++) {
 				TimeSeries.Sample sample = TimeSeries.GetKey(i);
 				NeuralNetwork.Feed(FeetSeries.GetFutureLeftFootPosition(sample.Index).GetRelativePositionTo(root));
 				NeuralNetwork.FeedXZ(FeetSeries.GetFutureLeftFootDirection(sample.Index).GetRelativeDirectionTo(root));
 				NeuralNetwork.Feed(FeetSeries.GetFutureRightFootPosition(sample.Index).GetRelativePositionTo(root));
 				NeuralNetwork.FeedXZ(FeetSeries.GetFutureRightFootDirection(sample.Index).GetRelativeDirectionTo(root));
-			}
-		}*/
+			}*/
+			NeuralNetwork.Feed(FeetSeries.GetFutureLeftFootPosition(TimeSeries.Pivot).GetRelativePositionTo(root));
+			NeuralNetwork.Feed(FeetSeries.GetFutureRightFootPosition(TimeSeries.Pivot).GetRelativePositionTo(root));
+		}
 
 		if(UseHeightMap){
 			EnvironmentHeight.Sense(root);
@@ -446,176 +456,60 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 			GoalSeries.Values[sample.Index] = Utility.Interpolate(GoalSeries.Values[sample.Index], actions, weight * NetworkControl);
 		}
 
-		/*//Read Feet Goal Points / Directions
 		if(UseSteps){
-			int sampleNumber = 0;
-			Vector3 leftMeanPosition = Vector3.zero;
-			Vector3 leftMeanDirection = Vector3.zero;
-			Vector3 rightMeanPosition = Vector3.zero;
-			Vector3 rightMeanDirection = Vector3.zero;
-			//Reading from net and computing average
-			for(int i=TimeSeries.PivotKey; i<TimeSeries.KeyCount; i++){
-				//TimeSeries.Sample sample = TimeSeries.GetKey(i);
-				Vector3 LeftGoalPosition = NeuralNetwork.ReadVector3().GetRelativePositionFrom(root);
-				LeftGoalPosition.y = Utility.GetHeight(LeftGoalPosition, LayerMask.GetMask("Ground", "Interaction"));
-				Vector3 LeftGoalDirection = NeuralNetwork.ReadXZ().GetRelativeDirectionFrom(root);
-				leftMeanPosition += LeftGoalPosition;
-				leftMeanDirection += LeftGoalDirection;
-				//FeetSeries.SetFutureLeftFootPosition(sample.Index, LeftGoalPosition);
-				//FeetSeries.SetFutureLeftFootDirection(sample.Index, LeftGoalDirection);
-				Vector3 RightGoalPosition = NeuralNetwork.ReadVector3().GetRelativePositionFrom(root);
-				RightGoalPosition.y = Utility.GetHeight(RightGoalPosition, LayerMask.GetMask("Ground", "Interaction"));
-				Vector3 RightGoalDirection = NeuralNetwork.ReadXZ().GetRelativeDirectionFrom(root);
-				rightMeanPosition += RightGoalPosition;
-				rightMeanDirection += RightGoalDirection;
-				//FeetSeries.SetFutureRightFootPosition(sample.Index, RightGoalPosition);
-				//FeetSeries.SetFutureRightFootDirection(sample.Index, RightGoalDirection);
-				sampleNumber+=1;
+			//Read Future Footstep
+			float velocityThreshold = 0.00f;
+			Vector3 LeftGoalPosition = NeuralNetwork.ReadVector3().GetRelativePositionFrom(root);
+			LeftGoalPosition.y = Utility.GetHeight(LeftGoalPosition, LayerMask.GetMask("Ground", "Interaction"));
+			
+			currentLeftGoal = LeftGoalPosition;
+			leftGoalVelocity = (currentLeftGoal - pastLeftGoal).magnitude / GetFramerate();
+			//Debug.Log("Left Vel = " + leftGoalVelocity);
+			pastLeftGoal = currentLeftGoal;
+			if(leftGoalVelocity > velocityThreshold){
+				Vector3 leftFootPos = Actor.GetBoneTransformation("LeftAnkle").GetPosition();
+				LeftGoalPosition = SetValidStairStep(LeftGoalPosition, leftFootPos);
+				LeftGoalPosition = SetNewZValue(LeftGoalPosition);
+				//LeftGoalPosition = SetNewGoalPosition(LeftGoalPosition); // Correcting footstep over tread
+			}
+			
+			Vector3 RightGoalPosition = NeuralNetwork.ReadVector3().GetRelativePositionFrom(root);
+			RightGoalPosition.y = Utility.GetHeight(RightGoalPosition, LayerMask.GetMask("Ground", "Interaction"));
+			currentRightGoal = RightGoalPosition;
+			rightGoalVelocity = (currentRightGoal - pastRightGoal).magnitude / GetFramerate();
+			//Debug.Log("Left Vel = " + rightGoalVelocity);
+			pastRightGoal = currentRightGoal;
+			if(rightGoalVelocity > velocityThreshold){
+				Vector3 rightFootPos = Actor.GetBoneTransformation("RightAnkle").GetPosition();
+				RightGoalPosition = SetValidStairStep(RightGoalPosition, rightFootPos);
+				RightGoalPosition = SetNewZValue(RightGoalPosition);
+				//RightGoalPosition = SetNewGoalPosition(RightGoalPosition); // Correcting footstep over tread
+			}
+			for(int i=0; i<TimeSeries.KeyCount; i++){
+				//Saving Future footstep in all time series values
+				TimeSeries.Sample sample = TimeSeries.GetKey(i);
+				FeetSeries.SetFutureLeftFootPosition(sample.Index, LeftGoalPosition);
+				FeetSeries.SetFutureRightFootPosition(sample.Index, RightGoalPosition);
 			}
 
-			leftMeanPosition /= sampleNumber;
-			leftMeanDirection /= sampleNumber;
-			rightMeanPosition /= sampleNumber;
-			rightMeanDirection /= sampleNumber;
+			/*//Correcting Feet Trajectories according to foot step goal
+			float AnkleToFootCenterDistance = 0.04f;
+			float AnkleHeight = 0.08f;
+			float OffAnkleDistance = 0f;
+			float OffRootDistance = 0f;
+			float AnkleDistanceThreshold = 0.25f;
+			float RootDistanceThreshold = 0.3f;
+			Vector3 DesiredLeftAnklePos = LeftGoalPosition + (-1f) * Actor.GetRoot().forward.normalized * AnkleToFootCenterDistance;
+			DesiredLeftAnklePos.y += AnkleHeight;
 
-			//Debug.Log("Left Mean Position = " + leftMeanPosition);
-
-			//Replacing average into Future FeetSeries
 			for(int i=TimeSeries.PivotKey; i<TimeSeries.KeyCount; i++){
 				TimeSeries.Sample sample = TimeSeries.GetKey(i);
-				//Vector3 LeftGoalPosition = NeuralNetwork.ReadVector3().GetRelativePositionFrom(root);
-				//Vector3 LeftGoalDirection = NeuralNetwork.ReadXZ().GetRelativeDirectionFrom(root);
-				FeetSeries.SetFutureLeftFootPosition(sample.Index, leftMeanPosition);
-				FeetSeries.SetFutureLeftFootDirection(sample.Index, leftMeanDirection);
-				//Vector3 RightGoalPosition = NeuralNetwork.ReadVector3().GetRelativePositionFrom(root);
-				//Vector3 RightGoalDirection = NeuralNetwork.ReadXZ().GetRelativeDirectionFrom(root);
-				FeetSeries.SetFutureRightFootPosition(sample.Index, rightMeanPosition);
-				FeetSeries.SetFutureRightFootDirection(sample.Index, rightMeanDirection);
-			}
-
-			if(RootSeries.GetVelocity(TimeSeries.PivotKey).sqrMagnitude > 0.3f){
-				FirstStep = true;
-			}
-
-			//Debug.Log("RootVel = " + RootSeries.GetVelocity(TimeSeries.PivotKey).sqrMagnitude);
-			// If character is in "Idle" and root not moving, then give a bump in moving dir //
-			if(StyleSeries.GetCurrentStyle(TimeSeries.PivotKey) == "Idle" && 
-				RootSeries.GetVelocity(TimeSeries.PivotKey).sqrMagnitude < 0.1f &&
-				Controller.QueryMove(KeyCode.W, KeyCode.S, KeyCode.A, KeyCode.D, Signals) != Vector3.zero){
-					Vector3 move = Controller.QueryMove(KeyCode.W, KeyCode.S, KeyCode.A, KeyCode.D, Signals);
-					Vector3 FutureLeftGoal = Vector3.zero;
-					Vector3 FutureRightGoal = Vector3.zero;
-					Matrix4x4 LeftAnkle = Actor.GetBoneTransformation("LeftAnkle");
-					Matrix4x4 RightAnkle = Actor.GetBoneTransformation("RightAnkle");
-					Vector3 LeftAnklePos = Actor.GetBoneTransformation("LeftAnkle").GetPosition();
-					Vector3 RightAnklePos = Actor.GetBoneTransformation("RightAnkle").GetPosition();
-					float FirstStepOffset = 0.6f;
-					float StepOffset = 1.2f;
-					float LeftBias = 0f;
-					float RightBias = 0f;
-
-					if(FirstStep){
-						// (Vector3.Distance(FeetSeries.GetFutureLeftFootPosition(TimeSeries.KeyCount-1), LeftAnklePos) > 
-							//Vector3.Distance(FeetSeries.GetFutureRightFootPosition(TimeSeries.KeyCount-1), RightAnklePos))
-						if(Actor.GetBoneTransformation("LeftAnkle").GetPosition().y > Actor.GetBoneTransformation("RightAnkle").GetPosition().y){
-								LeftBias = FirstStepOffset;
-								RightBias = StepOffset;
-								FirstStep = false;
-								LeftGoalReached = false;
-								RightGoalReached = true;
-								LeftAnklePos.y = Utility.GetHeight(LeftAnklePos, LayerMask.GetMask("Ground","Interaction"));
-								FutureLeftGoal = LeftAnklePos + LeftBias * RootSeries.GetTransformation(TimeSeries.PivotKey).GetForward();
-								FutureLeftGoal.y = Utility.GetHeight(FutureLeftGoal, LayerMask.GetMask("Ground","Interaction"));
-								FutureLeftGoalStored = FutureLeftGoal;
-								RightAnklePos.y = Utility.GetHeight(RightAnklePos, LayerMask.GetMask("Ground","Interaction"));
-								FutureRightGoal = RightAnklePos;
-								FutureRightGoalStored = FutureRightGoal;	
-							}
-						else{
-							LeftBias = StepOffset;
-							RightBias = FirstStepOffset;
-							FirstStep = false;
-							LeftGoalReached = true;
-							RightGoalReached = false;
-							RightAnklePos.y = Utility.GetHeight(RightAnklePos, LayerMask.GetMask("Ground","Interaction"));
-							FutureRightGoal = RightAnklePos + RightBias * RootSeries.GetTransformation(TimeSeries.PivotKey).GetForward();//move.GetRelativePositionFrom(RightAnkle);
-							FutureRightGoal.y = Utility.GetHeight(FutureRightGoal, LayerMask.GetMask("Ground","Interaction"));
-							FutureRightGoalStored = FutureRightGoal;
-							LeftAnklePos.y = Utility.GetHeight(LeftAnklePos, LayerMask.GetMask("Ground","Interaction"));
-							FutureLeftGoal = LeftAnklePos;
-							FutureLeftGoalStored = FutureLeftGoal;
-						}
-					}else{
-						LeftBias = StepOffset;
-						RightBias = StepOffset;
-					}
-
-					if(RightGoalReached){
-						//LeftAnklePos.y = Utility.GetHeight(LeftAnklePos, LayerMask.GetMask("Ground","Interaction"));
-						//FutureLeftGoal = LeftAnklePos + LeftBias * RootSeries.GetTransformation(TimeSeries.PivotKey).GetForward();//move.GetRelativePositionFrom(LeftAnkle);
-						//FutureLeftGoal.y = Utility.GetHeight(FutureLeftGoal, LayerMask.GetMask("Ground","Interaction"));
-						//FutureLeftGoalStored = FutureLeftGoal;
-						LeftGoalReached = false;
-						if(Vector3.Distance(FutureLeftGoalStored, LeftAnklePos) < 0.3 ||
-							Vector3.Distance(FutureLeftGoalStored, LeftAnklePos) > 1.3){
-							LeftGoalReached = true;
-							RightAnklePos.y = Utility.GetHeight(RightAnklePos, LayerMask.GetMask("Ground","Interaction"));
-							FutureRightGoal = RightAnklePos + RightBias * RootSeries.GetTransformation(TimeSeries.PivotKey).GetForward();//move.GetRelativePositionFrom(RightAnkle);
-							FutureRightGoal.y = Utility.GetHeight(FutureRightGoal, LayerMask.GetMask("Ground","Interaction"));
-							FutureRightGoalStored = FutureRightGoal;
-							LeftAnklePos.y = Utility.GetHeight(LeftAnklePos, LayerMask.GetMask("Ground","Interaction"));
-							FutureLeftGoal = LeftAnklePos;
-							FutureLeftGoalStored = FutureLeftGoal;
-						}
-						for(int i=TimeSeries.PivotKey; i<TimeSeries.KeyCount; i++){
-							TimeSeries.Sample sample = TimeSeries.GetKey(i);
-							FeetSeries.SetFutureLeftFootPosition(sample.Index, FutureLeftGoalStored);
-							FeetSeries.SetFutureLeftFootDirection(sample.Index, RootSeries.GetTransformation(TimeSeries.PivotKey).GetForward());
-						}
-					}
-
-					if(LeftGoalReached){
-						//RightAnklePos.y = Utility.GetHeight(RightAnklePos, LayerMask.GetMask("Ground","Interaction"));
-						//FutureRightGoal = RightAnklePos + RightBias * RootSeries.GetTransformation(TimeSeries.PivotKey).GetForward();//move.GetRelativePositionFrom(RightAnkle);
-						//FutureRightGoal.y = Utility.GetHeight(FutureRightGoal, LayerMask.GetMask("Ground","Interaction"));
-						//FutureRightGoalStored = FutureRightGoal;
-						RightGoalReached = false;
-						if(Vector3.Distance(FutureRightGoalStored, RightAnklePos) < 0.3 ||
-							Vector3.Distance(FutureRightGoalStored, RightAnklePos) > 1.3){
-							RightGoalReached = true;
-							LeftAnklePos.y = Utility.GetHeight(LeftAnklePos, LayerMask.GetMask("Ground","Interaction"));
-							FutureLeftGoal = LeftAnklePos + LeftBias * RootSeries.GetTransformation(TimeSeries.PivotKey).GetForward();
-							FutureLeftGoal.y = Utility.GetHeight(FutureLeftGoal, LayerMask.GetMask("Ground","Interaction"));
-							FutureLeftGoalStored = FutureLeftGoal;
-							RightAnklePos.y = Utility.GetHeight(RightAnklePos, LayerMask.GetMask("Ground","Interaction"));
-							FutureRightGoal = RightAnklePos;
-							FutureRightGoalStored = FutureRightGoal;
-						}
-						for(int i=TimeSeries.PivotKey; i<TimeSeries.KeyCount; i++){
-							TimeSeries.Sample sample = TimeSeries.GetKey(i);
-							FeetSeries.SetFutureRightFootPosition(sample.Index, FutureRightGoalStored);
-							FeetSeries.SetFutureRightFootDirection(sample.Index, RootSeries.GetTransformation(TimeSeries.PivotKey).GetForward());
-						}
-					}
-
-					//Correcting Feet trajectory
-					FeetSeries.SetLeftFootPosition(TimeSeries.KeyCount, FutureLeftGoalStored);
-					FeetSeries.SetRightFootPosition(TimeSeries.KeyCount, FutureRightGoalStored);
-					for(int i=0; i<TimeSeries.KeyCount; i++){
-						float weight = (float)(i % TimeSeries.Resolution) / TimeSeries.Resolution;
-						//float weight = 0.5f;
-						TimeSeries.Sample sample = TimeSeries.Samples[i];//TimeSeries.GetKey(i);
-						TimeSeries.Sample prevSample = TimeSeries.GetPreviousKey(i);
-						TimeSeries.Sample nextSample = TimeSeries.GetNextKey(i);
-						FeetSeries.SetLeftFootPosition(sample.Index, Vector3.Lerp(FeetSeries.GetLeftFootPosition(prevSample.Index),FeetSeries.GetLeftFootPosition(nextSample.Index),weight));
-						//FeetSeries.SetFutureLeftFootDirection(sample.Index, move);
-						FeetSeries.SetRightFootPosition(sample.Index, Vector3.Lerp(FeetSeries.GetRightFootPosition(prevSample.Index),FeetSeries.GetRightFootPosition(nextSample.Index),weight));
-						//FeetSeries.SetFutureRightFootDirection(sample.Index, move);
-					}
-			}
-
+				Vector3 LeftTrajectoryPos = FeetSeries.GetLeftFootPosition(sample.Index);
+				OffAnkleDistance = Vector3.Distance(LeftTrajectoryPos, DesiredLeftAnklePos);
+				OffRootDistance = Vector3.Distance(DesiredLeftAnklePos, Actor.GetRoot().position);
+				//FeetSeries.SetRightFootPosition(sample.Index, RightTrajectoryPosition);
+			}*/
 		}
-		*/
 
 		//Read Future Contacts
 		float[] contacts = NeuralNetwork.Read(ContactSeries.Bones.Length);
@@ -647,7 +541,6 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 				GoalSeries.Values[i][j] = Mathf.Lerp(GoalSeries.Values[prevSample.Index][j], GoalSeries.Values[nextSample.Index][j], weight);
 			}
 
-			// This interpolation adds a lot of noise
 			FeetSeries.SetLeftFootPosition(sample.Index, Vector3.Lerp(FeetSeries.GetLeftFootPosition(sample.Index), FeetSeries.GetLeftFootPosition(nextSample.Index),weight));
 			//FeetSeries.SetLeftFootDirection(sample.Index, Vector3.Slerp(FeetSeries.GetLeftFootPosition(prevSample.Index), FeetSeries.GetLeftFootDirection(nextSample.Index), weight));
 			FeetSeries.SetRightFootPosition(sample.Index, Vector3.Lerp(FeetSeries.GetRightFootPosition(sample.Index), FeetSeries.GetRightFootPosition(nextSample.Index),weight));
@@ -704,6 +597,83 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		//FeetSeries.SetRightFootTransformation(TimeSeries.Pivot, Actor.GetBoneTransformation("RightAnkle"));
 		//Debug.Log("Read completed " + counter);
 		//counter += 1;
+	}
+
+	private Vector3 SetNewGoalPosition(Vector3 originalPos){
+		float distanceOffset = 0.2f;
+		float frontDistance = 0f;
+		float backDistance = 0f;
+		Vector3 ProjectedPoint = Vector3.zero;
+		Vector3 CollisionPoint = Vector3.zero;
+		Vector3 originalPosMovedUp = originalPos;
+		originalPosMovedUp.y += 1;
+		RaycastHit hitRay;
+		Physics.Raycast(originalPosMovedUp, Vector3.down, out hitRay, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
+		if(hitRay.transform.localScale.x < 1f){
+			Vector3 FrontPoint = hitRay.point + Actor.GetRoot().forward.normalized * distanceOffset;
+			//Debug.DrawRay(hitRay.point, Actor.GetRoot().forward, Color.red, 1f);
+			//Debug.DrawRay(FrontPoint, Actor.GetRoot().forward, Color.blue, 1f);
+			frontDistance = GetCorrectionDistance(hitRay, FrontPoint, -1f * Actor.GetRoot().forward.normalized);
+			Vector3 BackPoint = hitRay.point + (-1f) * Actor.GetRoot().forward.normalized * distanceOffset;
+			if(frontDistance == 0f){
+				backDistance = GetCorrectionDistance(hitRay, BackPoint, Actor.GetRoot().forward.normalized);
+			}
+			return originalPos 	+ (-1f * Actor.GetRoot().forward.normalized * frontDistance)
+								+ (Actor.GetRoot().forward.normalized * backDistance);
+		}
+		return originalPos;
+	}
+
+	private float GetCorrectionDistance(RaycastHit hitRay, Vector3 OffsetPoint, Vector3 ShootingDirection){
+		float OffsetPointHeight = Utility.GetHeight(OffsetPoint, LayerMask.GetMask("Ground","Interaction"));
+		//Debug.Log("OffsetPoint height = " + OffsetPointHeight);
+		OffsetPoint.y += 1;
+		Vector3 hitRayPoint = hitRay.point;
+		RaycastHit hitRayOffsetPoint;
+		RaycastHit hitRayCollision;
+		if(OffsetPointHeight != hitRayPoint.y){
+			Physics.Raycast(OffsetPoint, Vector3.down, out hitRayOffsetPoint, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
+			OffsetPoint.y = hitRayOffsetPoint.point.y;
+			if(OffsetPointHeight > hitRayPoint.y){
+				OffsetPoint.y = hitRayPoint.y;
+			}else{
+				hitRayPoint.y = OffsetPoint.y;
+			}
+			//Debug.DrawRay(hitRayPoint, ShootingDirection, Color.red, 1f);
+			Debug.DrawRay(OffsetPoint, ShootingDirection, Color.blue, 1f);
+			Physics.Raycast(OffsetPoint, ShootingDirection, out hitRayCollision, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
+			//Debug.DrawRay(hitRayCollision.point, ShootingDirection, Color.blue, 1f);
+			return Vector3.Distance(OffsetPoint, hitRayCollision.point);
+		}
+		return 0f;
+	}
+
+	//Clipping distance of step goal from character
+	private Vector3 SetValidStairStep(Vector3 goalPoint, Vector3 footPos){
+		RaycastHit footPosHit;
+		RaycastHit validStairStep;
+		Physics.Raycast(footPos, Vector3.down, out footPosHit, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
+		float localScaleX = footPosHit.transform.localScale.x;
+		if(Vector3.Distance(goalPoint, footPosHit.point) > localScaleX * 2){
+			footPos.y = footPosHit.point.y;
+			Vector3 ValidStepLengthPoint = footPos + Actor.GetRoot().forward.normalized * localScaleX * 1.85f;
+			ValidStepLengthPoint.y += 1;
+			Physics.Raycast(ValidStepLengthPoint, Vector3.down, out validStairStep, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
+			return validStairStep.point;
+		}
+		return goalPoint;
+	}
+
+	//Setting Z value to the tread Z coordinate (center of tread)
+	private Vector3 SetNewZValue(Vector3 originalPos){
+		Vector3 originalPosMovedUp = originalPos;
+		originalPosMovedUp.y += 1;
+		RaycastHit hitRay;
+		Physics.Raycast(originalPosMovedUp, Vector3.down, out hitRay, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
+		if(hitRay.transform.localScale.x < 1f){
+			originalPos.z = hitRay.transform.position.z;
+		}
+		return originalPos;
 	}
 
 	private void Default() {
@@ -1415,5 +1385,176 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 			}
 		}
 	}
+
+	/*//Read Feet Goal Points / Directions
+		if(UseSteps){
+			int sampleNumber = 0;
+			Vector3 leftMeanPosition = Vector3.zero;
+			Vector3 leftMeanDirection = Vector3.zero;
+			Vector3 rightMeanPosition = Vector3.zero;
+			Vector3 rightMeanDirection = Vector3.zero;
+			//Reading from net and computing average
+			for(int i=TimeSeries.PivotKey; i<TimeSeries.KeyCount; i++){
+				//TimeSeries.Sample sample = TimeSeries.GetKey(i);
+				Vector3 LeftGoalPosition = NeuralNetwork.ReadVector3().GetRelativePositionFrom(root);
+				LeftGoalPosition.y = Utility.GetHeight(LeftGoalPosition, LayerMask.GetMask("Ground", "Interaction"));
+				Vector3 LeftGoalDirection = NeuralNetwork.ReadXZ().GetRelativeDirectionFrom(root);
+				leftMeanPosition += LeftGoalPosition;
+				leftMeanDirection += LeftGoalDirection;
+				//FeetSeries.SetFutureLeftFootPosition(sample.Index, LeftGoalPosition);
+				//FeetSeries.SetFutureLeftFootDirection(sample.Index, LeftGoalDirection);
+				Vector3 RightGoalPosition = NeuralNetwork.ReadVector3().GetRelativePositionFrom(root);
+				RightGoalPosition.y = Utility.GetHeight(RightGoalPosition, LayerMask.GetMask("Ground", "Interaction"));
+				Vector3 RightGoalDirection = NeuralNetwork.ReadXZ().GetRelativeDirectionFrom(root);
+				rightMeanPosition += RightGoalPosition;
+				rightMeanDirection += RightGoalDirection;
+				//FeetSeries.SetFutureRightFootPosition(sample.Index, RightGoalPosition);
+				//FeetSeries.SetFutureRightFootDirection(sample.Index, RightGoalDirection);
+				sampleNumber+=1;
+			}
+
+			leftMeanPosition /= sampleNumber;
+			leftMeanDirection /= sampleNumber;
+			rightMeanPosition /= sampleNumber;
+			rightMeanDirection /= sampleNumber;
+
+			//Debug.Log("Left Mean Position = " + leftMeanPosition);
+
+			//Replacing average into Future FeetSeries
+			for(int i=TimeSeries.PivotKey; i<TimeSeries.KeyCount; i++){
+				TimeSeries.Sample sample = TimeSeries.GetKey(i);
+				//Vector3 LeftGoalPosition = NeuralNetwork.ReadVector3().GetRelativePositionFrom(root);
+				//Vector3 LeftGoalDirection = NeuralNetwork.ReadXZ().GetRelativeDirectionFrom(root);
+				FeetSeries.SetFutureLeftFootPosition(sample.Index, leftMeanPosition);
+				FeetSeries.SetFutureLeftFootDirection(sample.Index, leftMeanDirection);
+				//Vector3 RightGoalPosition = NeuralNetwork.ReadVector3().GetRelativePositionFrom(root);
+				//Vector3 RightGoalDirection = NeuralNetwork.ReadXZ().GetRelativeDirectionFrom(root);
+				FeetSeries.SetFutureRightFootPosition(sample.Index, rightMeanPosition);
+				FeetSeries.SetFutureRightFootDirection(sample.Index, rightMeanDirection);
+			}
+
+			if(RootSeries.GetVelocity(TimeSeries.PivotKey).sqrMagnitude > 0.3f){
+				FirstStep = true;
+			}
+
+			//Debug.Log("RootVel = " + RootSeries.GetVelocity(TimeSeries.PivotKey).sqrMagnitude);
+			// If character is in "Idle" and root not moving, then give a bump in moving dir //
+			if(StyleSeries.GetCurrentStyle(TimeSeries.PivotKey) == "Idle" && 
+				RootSeries.GetVelocity(TimeSeries.PivotKey).sqrMagnitude < 0.1f &&
+				Controller.QueryMove(KeyCode.W, KeyCode.S, KeyCode.A, KeyCode.D, Signals) != Vector3.zero){
+					Vector3 move = Controller.QueryMove(KeyCode.W, KeyCode.S, KeyCode.A, KeyCode.D, Signals);
+					Vector3 FutureLeftGoal = Vector3.zero;
+					Vector3 FutureRightGoal = Vector3.zero;
+					Matrix4x4 LeftAnkle = Actor.GetBoneTransformation("LeftAnkle");
+					Matrix4x4 RightAnkle = Actor.GetBoneTransformation("RightAnkle");
+					Vector3 LeftAnklePos = Actor.GetBoneTransformation("LeftAnkle").GetPosition();
+					Vector3 RightAnklePos = Actor.GetBoneTransformation("RightAnkle").GetPosition();
+					float FirstStepOffset = 0.6f;
+					float StepOffset = 1.2f;
+					float LeftBias = 0f;
+					float RightBias = 0f;
+
+					if(FirstStep){
+						// (Vector3.Distance(FeetSeries.GetFutureLeftFootPosition(TimeSeries.KeyCount-1), LeftAnklePos) > 
+							//Vector3.Distance(FeetSeries.GetFutureRightFootPosition(TimeSeries.KeyCount-1), RightAnklePos))
+						if(Actor.GetBoneTransformation("LeftAnkle").GetPosition().y > Actor.GetBoneTransformation("RightAnkle").GetPosition().y){
+								LeftBias = FirstStepOffset;
+								RightBias = StepOffset;
+								FirstStep = false;
+								LeftGoalReached = false;
+								RightGoalReached = true;
+								LeftAnklePos.y = Utility.GetHeight(LeftAnklePos, LayerMask.GetMask("Ground","Interaction"));
+								FutureLeftGoal = LeftAnklePos + LeftBias * RootSeries.GetTransformation(TimeSeries.PivotKey).GetForward();
+								FutureLeftGoal.y = Utility.GetHeight(FutureLeftGoal, LayerMask.GetMask("Ground","Interaction"));
+								FutureLeftGoalStored = FutureLeftGoal;
+								RightAnklePos.y = Utility.GetHeight(RightAnklePos, LayerMask.GetMask("Ground","Interaction"));
+								FutureRightGoal = RightAnklePos;
+								FutureRightGoalStored = FutureRightGoal;	
+							}
+						else{
+							LeftBias = StepOffset;
+							RightBias = FirstStepOffset;
+							FirstStep = false;
+							LeftGoalReached = true;
+							RightGoalReached = false;
+							RightAnklePos.y = Utility.GetHeight(RightAnklePos, LayerMask.GetMask("Ground","Interaction"));
+							FutureRightGoal = RightAnklePos + RightBias * RootSeries.GetTransformation(TimeSeries.PivotKey).GetForward();//move.GetRelativePositionFrom(RightAnkle);
+							FutureRightGoal.y = Utility.GetHeight(FutureRightGoal, LayerMask.GetMask("Ground","Interaction"));
+							FutureRightGoalStored = FutureRightGoal;
+							LeftAnklePos.y = Utility.GetHeight(LeftAnklePos, LayerMask.GetMask("Ground","Interaction"));
+							FutureLeftGoal = LeftAnklePos;
+							FutureLeftGoalStored = FutureLeftGoal;
+						}
+					}else{
+						LeftBias = StepOffset;
+						RightBias = StepOffset;
+					}
+
+					if(RightGoalReached){
+						//LeftAnklePos.y = Utility.GetHeight(LeftAnklePos, LayerMask.GetMask("Ground","Interaction"));
+						//FutureLeftGoal = LeftAnklePos + LeftBias * RootSeries.GetTransformation(TimeSeries.PivotKey).GetForward();//move.GetRelativePositionFrom(LeftAnkle);
+						//FutureLeftGoal.y = Utility.GetHeight(FutureLeftGoal, LayerMask.GetMask("Ground","Interaction"));
+						//FutureLeftGoalStored = FutureLeftGoal;
+						LeftGoalReached = false;
+						if(Vector3.Distance(FutureLeftGoalStored, LeftAnklePos) < 0.3 ||
+							Vector3.Distance(FutureLeftGoalStored, LeftAnklePos) > 1.3){
+							LeftGoalReached = true;
+							RightAnklePos.y = Utility.GetHeight(RightAnklePos, LayerMask.GetMask("Ground","Interaction"));
+							FutureRightGoal = RightAnklePos + RightBias * RootSeries.GetTransformation(TimeSeries.PivotKey).GetForward();//move.GetRelativePositionFrom(RightAnkle);
+							FutureRightGoal.y = Utility.GetHeight(FutureRightGoal, LayerMask.GetMask("Ground","Interaction"));
+							FutureRightGoalStored = FutureRightGoal;
+							LeftAnklePos.y = Utility.GetHeight(LeftAnklePos, LayerMask.GetMask("Ground","Interaction"));
+							FutureLeftGoal = LeftAnklePos;
+							FutureLeftGoalStored = FutureLeftGoal;
+						}
+						for(int i=TimeSeries.PivotKey; i<TimeSeries.KeyCount; i++){
+							TimeSeries.Sample sample = TimeSeries.GetKey(i);
+							FeetSeries.SetFutureLeftFootPosition(sample.Index, FutureLeftGoalStored);
+							FeetSeries.SetFutureLeftFootDirection(sample.Index, RootSeries.GetTransformation(TimeSeries.PivotKey).GetForward());
+						}
+					}
+
+					if(LeftGoalReached){
+						//RightAnklePos.y = Utility.GetHeight(RightAnklePos, LayerMask.GetMask("Ground","Interaction"));
+						//FutureRightGoal = RightAnklePos + RightBias * RootSeries.GetTransformation(TimeSeries.PivotKey).GetForward();//move.GetRelativePositionFrom(RightAnkle);
+						//FutureRightGoal.y = Utility.GetHeight(FutureRightGoal, LayerMask.GetMask("Ground","Interaction"));
+						//FutureRightGoalStored = FutureRightGoal;
+						RightGoalReached = false;
+						if(Vector3.Distance(FutureRightGoalStored, RightAnklePos) < 0.3 ||
+							Vector3.Distance(FutureRightGoalStored, RightAnklePos) > 1.3){
+							RightGoalReached = true;
+							LeftAnklePos.y = Utility.GetHeight(LeftAnklePos, LayerMask.GetMask("Ground","Interaction"));
+							FutureLeftGoal = LeftAnklePos + LeftBias * RootSeries.GetTransformation(TimeSeries.PivotKey).GetForward();
+							FutureLeftGoal.y = Utility.GetHeight(FutureLeftGoal, LayerMask.GetMask("Ground","Interaction"));
+							FutureLeftGoalStored = FutureLeftGoal;
+							RightAnklePos.y = Utility.GetHeight(RightAnklePos, LayerMask.GetMask("Ground","Interaction"));
+							FutureRightGoal = RightAnklePos;
+							FutureRightGoalStored = FutureRightGoal;
+						}
+						for(int i=TimeSeries.PivotKey; i<TimeSeries.KeyCount; i++){
+							TimeSeries.Sample sample = TimeSeries.GetKey(i);
+							FeetSeries.SetFutureRightFootPosition(sample.Index, FutureRightGoalStored);
+							FeetSeries.SetFutureRightFootDirection(sample.Index, RootSeries.GetTransformation(TimeSeries.PivotKey).GetForward());
+						}
+					}
+
+					//Correcting Feet trajectory
+					FeetSeries.SetLeftFootPosition(TimeSeries.KeyCount, FutureLeftGoalStored);
+					FeetSeries.SetRightFootPosition(TimeSeries.KeyCount, FutureRightGoalStored);
+					for(int i=0; i<TimeSeries.KeyCount; i++){
+						float weight = (float)(i % TimeSeries.Resolution) / TimeSeries.Resolution;
+						//float weight = 0.5f;
+						TimeSeries.Sample sample = TimeSeries.Samples[i];//TimeSeries.GetKey(i);
+						TimeSeries.Sample prevSample = TimeSeries.GetPreviousKey(i);
+						TimeSeries.Sample nextSample = TimeSeries.GetNextKey(i);
+						FeetSeries.SetLeftFootPosition(sample.Index, Vector3.Lerp(FeetSeries.GetLeftFootPosition(prevSample.Index),FeetSeries.GetLeftFootPosition(nextSample.Index),weight));
+						//FeetSeries.SetFutureLeftFootDirection(sample.Index, move);
+						FeetSeries.SetRightFootPosition(sample.Index, Vector3.Lerp(FeetSeries.GetRightFootPosition(prevSample.Index),FeetSeries.GetRightFootPosition(nextSample.Index),weight));
+						//FeetSeries.SetFutureRightFootDirection(sample.Index, move);
+					}
+			}
+
+		}
+		*/
 
 }
