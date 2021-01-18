@@ -1,6 +1,8 @@
 ﻿#if UNITY_EDITOR
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
+using System.Globalization;
 using UnityEngine;
 using UnityEditor;
 using UnityEditorInternal;
@@ -346,6 +348,38 @@ public class ContactModule : Module {
 		Debug.Log("Future Goal Points Captured.");
 		editor.LoadFrame(current);
 		EditMotion = edit;
+	}
+
+	public void CaptureFeetVelocities(MotionEditor editor){
+		StreamWriter FootVelocities;
+		FootVelocities = CreateFile("DscFeetVelocities");
+		for(int i=0; i < Data.Frames.Length; i++){
+			Frame frame = Data.Frames[i];
+			editor.LoadFrame(frame);
+			FootVelocities.WriteLine(editor.GetActor().GetRoot().position.x.ToString("F5",new CultureInfo("en-US")) + " " +
+									editor.GetActor().GetRoot().position.y.ToString("F5",new CultureInfo("en-US")) + " " +
+									editor.GetActor().GetRoot().position.z.ToString("F5",new CultureInfo("en-US")) + " " +
+									editor.GetActor().GetBoneVelocity("LeftAnkle").magnitude.ToString("F5",new CultureInfo("en-US")) + " " +
+									editor.GetActor().GetBoneVelocity("RightAnkle").magnitude.ToString("F5",new CultureInfo("en-US")));
+		}
+		FootVelocities.Close();
+		Debug.Log("Feet Velocities saved.");
+	}
+
+	// Copied from MotionExporter
+    private StreamWriter CreateFile(string name) {
+		string filename = string.Empty;
+		string folder = Application.dataPath + "/../../FeetData/";
+		if(!File.Exists(folder+name+".txt")) {
+			filename = folder+name;
+		} else {
+			int i = 1;
+			while(File.Exists(folder+name+" ("+i+").txt")) {
+				i += 1;
+			}
+			filename = folder+name+" ("+i+")";
+		}
+		return File.CreateText(filename+".txt");
 	}
 
 	public void CaptureContactsNoCoroutine(MotionEditor editor) {
@@ -698,6 +732,9 @@ public class ContactModule : Module {
 	protected override void DerivedInspector(MotionEditor editor) {
 		if(Utility.GUIButton("Capture Contacts", UltiDraw.DarkGrey, UltiDraw.White)) {
 			EditorCoroutines.StartCoroutine(CaptureContacts(editor), this);
+		}
+		if(Utility.GUIButton("Save Velocity Values", UltiDraw.DarkGrey, UltiDraw.White)) {
+			CaptureFeetVelocities(editor);
 		}
 		EditorGUILayout.BeginHorizontal();
 		BakedContacts = (BakedContacts)EditorGUILayout.ObjectField(BakedContacts, typeof(BakedContacts), true);
