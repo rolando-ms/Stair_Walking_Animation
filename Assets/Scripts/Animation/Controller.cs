@@ -226,7 +226,7 @@ public class Controller {
 
 	//Debug.Log("Speed = " + targetSpeed);
 	//Debug.Log("Time = " + Time.deltaTime);
-	Debug.Log("Progress = " + progress);
+	//Debug.Log("Progress = " + progress);
     Vector3 targetPos = spline.MoveAlongSpline(ref progress, targetSpeed * Time.deltaTime);
     targetPos = new Vector3(targetPos.x, root.GetPosition().y, targetPos.z);
 
@@ -246,7 +246,7 @@ public class Controller {
 		Debug.DrawRay(root.GetPosition(), targetDir, Color.red);
 		Debug.DrawRay(root.GetPosition(), root.GetForward(), Color.blue);
 		float angle = Vector3.SignedAngle(targetDir, root.GetForward(), Vector3.up);
-		Debug.Log("Signed angle = " + angle);
+		//Debug.Log("Signed angle = " + angle);
 		if(angle >= 0 && Mathf.Abs(angle) >= hysterisis){
 			//Turn Left
 			LeftRigthTurns[0] = true;
