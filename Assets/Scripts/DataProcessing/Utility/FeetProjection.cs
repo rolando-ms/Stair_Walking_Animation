@@ -241,7 +241,8 @@ public class FeetProjection : MonoBehaviour
                             CounterLeftCorrectPoints += 1;
                         }
                     }else{
-                        LeftFootProjection.DrawFootPoint(UltiDraw.Red.Transparent(LeftTransparentValue), i);
+                        //LeftFootProjection.DrawFootPoint(UltiDraw.Red.Transparent(LeftTransparentValue), i);
+                        LeftFootProjection.DrawFootPoint(UltiDraw.Blue.Transparent(LeftTransparentValue), i);
                     }
                     
 
@@ -264,7 +265,8 @@ public class FeetProjection : MonoBehaviour
                             CounterRightCorrectPoints += 1;
                         }
                     }else{
-                        RightFootProjection.DrawFootPoint(UltiDraw.Red.Transparent(RightTransparentValue), i);
+                        //RightFootProjection.DrawFootPoint(UltiDraw.Red.Transparent(RightTransparentValue), i);
+                        RightFootProjection.DrawFootPoint(UltiDraw.Green.Transparent(RightTransparentValue), i);
                     }
                     //LeftFootProjection.DrawFootPoint(UltiDraw.Blue.Transparent(1f), i);
                     //RightFootProjection.DrawFootPoint(UltiDraw.Green.Transparent(1f), i);
