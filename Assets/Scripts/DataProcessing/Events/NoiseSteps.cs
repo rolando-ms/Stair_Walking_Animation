@@ -59,6 +59,8 @@ public class NoiseSteps : SceneEvent {
 		//MaxScaleNoise.x = 1.5f;
 		//MinPositionNoise.x = 0;
 		//MaxPositionNoise.x = 0;
+
+		// Default/0 = No noise ; 1 = Height noise ; 2 = Depth noise ; 3 = Height/Depth Noise
 		noiseType = 3;
 
 		MaxScaleNoise.x = 1;
