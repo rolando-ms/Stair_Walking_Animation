@@ -695,7 +695,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 
 					float Multiplier = 1f / (TimeSeries.KeyCount - TimeSeries.PivotKey + 1);
 
-					for(int i=TimeSeries.PivotKey + 1; i<TimeSeries.KeyCount; i++){
+					for(int i=TimeSeries.PivotKey; i<TimeSeries.KeyCount; i++){
 						TimeSeries.Sample sample2 = TimeSeries.GetKey(i);
 						Vector3 LeftTrajectoryPos = FeetSeries.GetLeftFootPosition(sample2.Index);
 						OffAnkleDistance = Vector3.Distance(LeftTrajectoryPos, DesiredLeftAnklePos);
@@ -723,12 +723,12 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 						//Vector3 OffsetLeftPosition = FeetSeries.GetLeftFootPosition(sample3.Index) + LeftOffsetVector;
 						//Debug.DrawLine(FeetSeries.GetLeftFootPosition(sample3.Index), OffsetLeftPosition, Color.yellow, 1f);
 						//FeetSeries.SetLeftFootPosition(sample3.Index, FeetSeries.GetLeftFootPosition(sample3.Index) + LeftOffsetVector);
-						for(int i=TimeSeries.PivotKey + 1; i<TimeSeries.KeyCount; i++){
+						for(int i=TimeSeries.PivotKey; i<TimeSeries.KeyCount; i++){
 							TimeSeries.Sample sample4 = TimeSeries.GetKey(i);
 							Vector3 OffsetLeftPosition = FeetSeries.GetLeftFootPosition(sample4.Index) + LeftOffsetVector;
 							Debug.DrawLine(FeetSeries.GetLeftFootPosition(sample4.Index), OffsetLeftPosition, Color.yellow, 1f);
 							float Weight = Mathf.Abs(MinLeftDistancePointIndex - i);
-							FeetSeries.SetLeftFootPosition(sample4.Index, FeetSeries.GetLeftFootPosition(sample4.Index) + LeftOffsetVector); //(1f - Multiplier * Weight) * 
+							FeetSeries.SetLeftFootPosition(sample4.Index, FeetSeries.GetLeftFootPosition(sample4.Index) + (1f - Multiplier * Weight) * LeftOffsetVector); // 
 						}
 					}
 
@@ -742,12 +742,12 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 						//Vector3 OffsetRightPosition = FeetSeries.GetRightFootPosition(sample3.Index) + RightOffsetVector;
 						//Debug.DrawLine(FeetSeries.GetRightFootPosition(sample3.Index), OffsetRightPosition, Color.yellow, 1f);
 						//FeetSeries.SetRightFootPosition(sample3.Index, FeetSeries.GetRightFootPosition(sample3.Index) + RightOffsetVector);
-						for(int i=TimeSeries.PivotKey + 1; i<TimeSeries.KeyCount; i++){
+						for(int i=TimeSeries.PivotKey; i<TimeSeries.KeyCount; i++){
 							TimeSeries.Sample sample4 = TimeSeries.GetKey(i);
 							Vector3 OffsetRightPosition = FeetSeries.GetRightFootPosition(sample4.Index) + RightOffsetVector;
 							Debug.DrawLine(FeetSeries.GetRightFootPosition(sample4.Index), OffsetRightPosition, Color.yellow, 1f);
 							float Weight = Mathf.Abs(MinRightDistancePointIndex - i);
-							FeetSeries.SetRightFootPosition(sample4.Index, FeetSeries.GetRightFootPosition(sample4.Index) + RightOffsetVector);//(1f - Multiplier * Weight) * 
+							FeetSeries.SetRightFootPosition(sample4.Index, FeetSeries.GetRightFootPosition(sample4.Index) + (1f - Multiplier * Weight) * RightOffsetVector);// 
 						}
 					}
 
@@ -768,6 +768,9 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 		for(int i=TimeSeries.PivotKey; i<TimeSeries.KeyCount; i++) {
 			PhaseSeries.Values[TimeSeries.GetKey(i).Index] = Mathf.Repeat(phase + NeuralNetwork.Read(), 1f);
 		}
+
+		//FeetSeries.SetLeftFootPosition(TimeSeries.Pivot, Actor.GetBoneTransformation("LeftAnkle").GetPosition());
+		//FeetSeries.SetRightFootPosition(TimeSeries.Pivot, Actor.GetBoneTransformation("RightAnkle").GetPosition());
 
 		//Interpolate Current to Future Trajectory
 		for(int i=0; i<TimeSeries.Samples.Length; i++) {
@@ -827,16 +830,21 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 			Actor.Bones[i].ApplyLength();
 		}
 
+		// Setting Ankle position estimation to the actor. Also correcting Toe position by offset
 		if(UseSteps){
 			if(CorrectAnklePosition){
-				// Setting Ankle position estimation to the actor. Also correcting Toe position by offset
+				float ankleVelThres = 0.8f;
 				Actor.FindBone("LeftAnkle").Transform.position = FeetSeries.LeftFootTransformations[TimeSeries.Pivot].GetPosition();
-				Actor.FindBone("LeftToe").Transform.position = Actor.FindBone("LeftToe").Transform.position + (-1f) * Actor.FindBone("Hips").Transform.up * 0.06f;
+				if(Actor.GetBoneVelocity("LeftAnkle").magnitude < ankleVelThres){
+					Actor.FindBone("LeftToe").Transform.position = Actor.FindBone("LeftToe").Transform.position + (-1f) * Actor.FindBone("Hips").Transform.up * 0.06f;
+				}
 				//Debug.Log("Foot height = " + FeetSeries.LeftFootTransformations[TimeSeries.Pivot].GetPosition().y);
 				//Actor.FindBone("LeftToe").Transform.position = LeftToePos;
 				//Actor.FindBone("LeftAnkle").Transform.rotation = FeetSeries.LeftFootTransformations[TimeSeries.Pivot].GetRotation();
 				Actor.FindBone("RightAnkle").Transform.position = FeetSeries.RightFootTransformations[TimeSeries.Pivot].GetPosition();
-				Actor.FindBone("RightToe").Transform.position = Actor.FindBone("RightToe").Transform.position + (-1f) * Actor.FindBone("Hips").Transform.up * 0.06f;
+				if(Actor.GetBoneVelocity("RightAnkle").magnitude < ankleVelThres){
+					Actor.FindBone("RightToe").Transform.position = Actor.FindBone("RightToe").Transform.position + (-1f) * Actor.FindBone("Hips").Transform.up * 0.06f;
+				}
 				//Actor.FindBone("RightAnkle").Transform.position = RightToePos; 
 				//Actor.FindBone("RightAnkle").Transform.rotation = FeetSeries.RightFootTransformations[TimeSeries.Pivot].GetRotation();
 			}
@@ -981,7 +989,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 			*/
 		} else {
 			if(activeSpline){
-				Debug.Log("Quit = " + Controller.quit);
+				//Debug.Log("Quit = " + Controller.quit);
 				if(Controller.quit){
 					UnityEditor.EditorApplication.isPlaying = false;
 				}
