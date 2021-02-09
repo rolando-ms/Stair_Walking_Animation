@@ -448,14 +448,14 @@ public class TimeSeries {
 				//Debug.Log("Right Foot = " + RightFootTransformations[i].GetPosition());
 			}
 
-			//Directions
+			/*//Directions
 			for(int i=0; i<LeftFootTransformations.Length; i+=step) {
 				UltiDraw.DrawLine(LeftFootTransformations[i].GetPosition(), LeftFootTransformations[i].GetPosition() + 0.25f*LeftFootTransformations[i].GetForward(), 0.025f, 0f, UltiDraw.Orange.Transparent(0.75f));
 			}
 
 			for(int i=0; i<RightFootTransformations.Length; i+=step) {
 				UltiDraw.DrawLine(RightFootTransformations[i].GetPosition(), RightFootTransformations[i].GetPosition() + 0.25f*RightFootTransformations[i].GetForward(), 0.025f, 0f, UltiDraw.Orange.Transparent(0.75f));
-			}
+			}*/
 
 			//Velocities
 			for(int i=0; i<LeftFootVelocities.Length; i+=step) {
@@ -469,7 +469,7 @@ public class TimeSeries {
 			//Goals
 			//Positions
 			for(int i=0; i<LeftFootTransformations.Length; i+=step) {
-				UltiDraw.DrawSphere(FutureLeftFootGoalPoints[i], Quaternion.identity, 0.1f, UltiDraw.Orange);
+				UltiDraw.DrawSphere(FutureLeftFootGoalPoints[i], Quaternion.identity, 0.1f, UltiDraw.Blue);
 			}
 
 			for(int i=0; i<RightFootTransformations.Length; i+=step) {
