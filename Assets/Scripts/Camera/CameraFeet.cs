@@ -79,8 +79,8 @@ public class CameraFeet : MonoBehaviour
                 // Global X
                 SceneCameras[1].fieldOfView = 28f;
                 OffsetX = -2f;
-                OffsetY = 0f;
-                OffsetZ = 0f;
+                OffsetY = 0.25f;
+                OffsetZ = -0.5f;
                 transform.position = new Vector3(Target.x + OffsetX, Target.y + OffsetY, Target.z + OffsetZ);
                 break;
             case 0:
