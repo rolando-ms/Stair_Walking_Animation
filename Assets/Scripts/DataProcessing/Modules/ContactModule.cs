@@ -229,10 +229,31 @@ public class ContactModule : Module {
 		List<Matrix4x4> targets = new List<Matrix4x4>();
 		for(int i=0; i<Sensors.Length; i++) {
 			if(Sensors[i].Edit != Sensor.ID.None) {
-				Vector3 HorizontalOffset = Sensors[i].GetHorizontalStepOffsetVector(frame, mirrored); // Offset from horizontal step noise
-				Matrix4x4 correctedTransformation = Sensors[i].GetCorrectedTransformation(frame, mirrored);
+				//Vector3 HorizontalOffset = Vector3.zero;
+				Vector3 correctedPosition = Vector3.zero;
 				Matrix4x4 rotationZ = Matrix4x4.TRS(new Vector3(0f,0f,0f), Quaternion.Euler(0f,0f,0f), Vector3.one);
-				Matrix4x4 correctedMatrix = Matrix4x4.TRS(correctedTransformation.GetPosition() + HorizontalOffset, correctedTransformation.GetRotation(), Vector3.one);
+				Matrix4x4 correctedMatrix = Matrix4x4.TRS(new Vector3(0f,0f,0f), Quaternion.Euler(0f,0f,0f), Vector3.one);
+				Matrix4x4 correctedTransformation = Sensors[i].GetCorrectedTransformation(frame, mirrored);
+				if(useSteps){
+					//HorizontalOffset = Sensors[i].GetHorizontalStepOffsetVector(frame, mirrored); // Offset from horizontal step noise
+					correctedPosition = GetCorrectedStraightStairWalkingStep(frame, editor.GetActor().GetRoot(), correctedTransformation.GetPosition(), Sensors[i].GetName(), mirrored);
+					Vector3 offsetCorrectedPosition = correctedPosition;
+					offsetCorrectedPosition.y += 1f;
+					RaycastHit hitRay;
+					Physics.Raycast(offsetCorrectedPosition, Vector3.down, out hitRay, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+					//Debug.DrawRay(offsetCorrectedPosition, Vector3.down, Color.cyan, 1f);
+					//if(hitRay.collider.tag == "Tread"){
+					//	if(Sensors[i].GetContact(frame, mirrored) > 0f){
+							//Sensors[i].Get
+							//correctedPosition += Vector3.up.normalized * 0.08f; // Ankle offset
+					//	}
+					//}
+					correctedMatrix = Matrix4x4.TRS(correctedPosition, correctedTransformation.GetRotation(), Vector3.one);
+				}else{
+					correctedMatrix = Matrix4x4.TRS(correctedTransformation.GetPosition(), correctedTransformation.GetRotation(), Vector3.one);	
+				}
+				//correctedMatrix = Matrix4x4.TRS(correctedTransformation.GetPosition() + HorizontalOffset, correctedTransformation.GetRotation(), Vector3.one);
+				correctedMatrix = Matrix4x4.TRS(correctedTransformation.GetPosition(), correctedTransformation.GetRotation(), Vector3.one);
 				targets.Add(rotationZ * correctedMatrix);
 			}
 		}
@@ -297,6 +318,10 @@ public class ContactModule : Module {
 			Sensors[s].InverseFutureGoalPoints = new Vector3[Data.Frames.Length];
 			Sensors[s].RegularFutureGoalDirections = new Vector3[Data.Frames.Length];
 			Sensors[s].InverseFutureGoalDirections = new Vector3[Data.Frames.Length];
+			Sensors[s].RegularContactColliderNames = new string[Data.Frames.Length];
+			Sensors[s].InverseContactColliderNames = new string[Data.Frames.Length];
+			Sensors[s].RegularFutureGoalColliderNames = new string[Data.Frames.Length];
+			Sensors[s].InverseFutureGoalColliderNames = new string[Data.Frames.Length];
 		}
 		System.DateTime time = Utility.GetTimestamp();
 		//int count = 0;
@@ -306,7 +331,12 @@ public class ContactModule : Module {
 			editor.LoadFrame(frame);
 			for(int s=0; s<Sensors.Length; s++) {
 				Sensors[s].CaptureContact(frame, editor);
-				Sensors[s].CaptureDirections(frame, editor);
+				if(useSteps){
+					Sensors[s].CaptureDirections(frame, editor);
+					Vector3 point = editor.Mirror ? Sensors[s].InverseContactPoints[frame.Index-1] : Sensors[s].RegularContactPoints[frame.Index-1];
+					Sensors[s].CaptureColliderName(frame, editor, point);
+					Sensors[s].CaptureFutureColliderName(frame, editor, point);
+				}
 			}
 			//if(count > Step) {
 			if(Utility.GetElapsedTime(time) > 0.2f) {
@@ -316,35 +346,41 @@ public class ContactModule : Module {
 			}
 			//}
 		}
-		editor.Mirror = !editor.Mirror;
-		for(int i=0; i<Data.Frames.Length; i++) {
-			//count += 1;
-			Frame frame = Data.Frames[i];
-			editor.LoadFrame(frame);
-			for(int s=0; s<Sensors.Length; s++) {
-				Sensors[s].CaptureDirections(frame, editor);
+		if(useSteps){
+			editor.Mirror = !editor.Mirror;
+			for(int i=0; i<Data.Frames.Length; i++) {
+				//count += 1;
+				Frame frame = Data.Frames[i];
+				editor.LoadFrame(frame);
+				for(int s=0; s<Sensors.Length; s++) {
+					Sensors[s].CaptureDirections(frame, editor);
+					Vector3 point = editor.Mirror ? Sensors[s].InverseContactPoints[frame.Index-1] : Sensors[s].RegularContactPoints[frame.Index-1];
+					Sensors[s].CaptureColliderName(frame, editor, point);
+					Sensors[s].CaptureFutureColliderName(frame, editor, point);
+				}
+				//if(count > Step) {
+				if(Utility.GetElapsedTime(time) > 0.2f) {
+					time = Utility.GetTimestamp();
+					//count = 0;
+					yield return new WaitForSeconds(0f);
+				}
+				//}
 			}
-			//if(count > Step) {
-			if(Utility.GetElapsedTime(time) > 0.2f) {
-				time = Utility.GetTimestamp();
-				//count = 0;
-				yield return new WaitForSeconds(0f);
+			editor.Mirror = !editor.Mirror;
+			for(int i=0; i<Data.Frames.Length; i++){
+				Frame frame = Data.Frames[i];
+				for(int s=0; s<Sensors.Length; s++){
+					Sensors[s].CaptureFutureGoalPoints(frame, FutureTrajectoryWindow, Mathf.RoundToInt(Data.Framerate));
+				}
 			}
-			//}
-		}
-		editor.Mirror = !editor.Mirror;
-		for(int i=0; i<Data.Frames.Length; i++){
-			Frame frame = Data.Frames[i];
 			for(int s=0; s<Sensors.Length; s++){
-				Sensors[s].CaptureFutureGoalPoints(frame, FutureTrajectoryWindow, Mathf.RoundToInt(Data.Framerate));
+				string sensorName = Sensors[s].GetName();
+				if(sensorName == "LeftAnkle" || sensorName == "RightAnkle"){
+					Sensors[s].FillInZeros(Data.Frames.Length);
+				}
 			}
 		}
-		for(int s=0; s<Sensors.Length; s++){
-			string sensorName = Sensors[s].GetName();
-			if(sensorName == "LeftAnkle" || sensorName == "RightAnkle"){
-				Sensors[s].FillInZeros(Data.Frames.Length);
-			}
-		}
+		
 		Debug.Log("Future Goal Points Captured.");
 		editor.LoadFrame(current);
 		EditMotion = edit;
@@ -524,6 +560,235 @@ public class ContactModule : Module {
 		return (GetEstimatedRightFootPosition(reference, offset + delta, mirrored) - GetEstimatedRightFootPosition(reference, offset, mirrored)) / delta;
 	}
 
+	public Vector3 GetCorrectedStraightStairWalkingStep(Frame frame, Transform root, Vector3 point, string sensorName, bool mirrored){
+		/*
+		Sensor sensor = GetSensor(sensorName);
+		Vector3 correctionOffset = Vector3.zero;
+		RaycastHit contactRay;
+		Vector3 pointMovedUp = point;
+		pointMovedUp.y += 1f;
+		Physics.Raycast(pointMovedUp, Vector3.down, out contactRay, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
+		if(sensor.GetContact(frame, mirrored) > 0){
+			if(Vector3.Distance(point, contactRay.point) < sensor.Threshold){
+				//Vector3 correctionOffset = sensor.GetCorrectedContactPoint(frame, mirrored) - sensor.GetContactPoint(frame, mirrored);
+				correctionOffset = GetCorrectionVector(frame, mirrored, sensorName);
+				return point + correctionOffset;
+			}else{
+				//if(contactRay.transform.tag == "Tread"){
+				//	if(GetHomogeneousNoiseStatus()) return GetCorrectedPointWithEvenNoise(frame, root, point, sensorName, mirrored);
+				//	else return GetCorrectedPointWithStepNoise(root, point, mirrored);
+				//}else return point;
+				
+				Sensor.ID originalID = sensor.Edit;
+				float originalThreshold = sensor.Threshold;
+				sensor.Edit = Sensor.ID.RayTopDown;
+				sensor.Threshold = 1f;
+				Vector3 newPoint = sensor.GetCorrectedContactPoint(frame, mirrored);
+				sensor.Edit = originalID;
+				sensor.Threshold = originalThreshold;
+				correctionOffset = newPoint - sensor.GetContactPoint(frame, mirrored);
+				return point + correctionOffset;
+			}
+		}else{
+			return point;
+		}
+		*/
+		//if(GetHomogeneousNoiseStatus()){
+		//	point += GetStairWalkingCorrectionVector(frame, point, mirrored, sensorName);
+		//	return point;
+		//}else{
+			RaycastHit contactRay;
+			Vector3 pointMovedUp = point;
+			pointMovedUp.y += 1f;
+			Physics.Raycast(pointMovedUp, Vector3.down, out contactRay, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
+			if(contactRay.transform.tag == "Tread"){
+				return GetCorrectedPointWithStepNoise(root, point, mirrored);
+			}else return point;
+		//}
+	}
+
+	public Vector3 GetStairWalkingCorrectionVector(Frame frame, Vector3 point, bool mirrored, string sensorName){
+		Sensor sensor = GetSensor(sensorName);
+		Vector3 correctionOffset = Vector3.zero;
+		RaycastHit contactRay;
+		Vector3 pointMovedUp = point;
+		pointMovedUp.y += 1f;
+		Physics.Raycast(pointMovedUp, Vector3.down, out contactRay, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
+		if(sensor.GetContact(frame, mirrored) > 0){
+			if(Vector3.Distance(point, contactRay.point) < sensor.Threshold){
+				//Vector3 correctionOffset = sensor.GetCorrectedContactPoint(frame, mirrored) - sensor.GetContactPoint(frame, mirrored);
+				correctionOffset = GetContactCorrectionVector(frame, mirrored, sensorName);
+				return correctionOffset;
+			}else{
+				/*if(contactRay.transform.tag == "Tread"){
+					if(GetHomogeneousNoiseStatus()) return GetCorrectedPointWithEvenNoise(frame, root, point, sensorName, mirrored);
+					else return GetCorrectedPointWithStepNoise(root, point, mirrored);
+				}else return point;
+				*/
+				Sensor.ID originalID = sensor.Edit;
+				float originalThreshold = sensor.Threshold;
+				sensor.Edit = Sensor.ID.RayTopDown;
+				sensor.Threshold = 1f;
+				Vector3 newPoint = sensor.GetCorrectedContactPoint(frame, mirrored);
+				sensor.Edit = originalID;
+				sensor.Threshold = originalThreshold;
+				correctionOffset = newPoint - sensor.GetContactPoint(frame, mirrored);
+				return correctionOffset;
+			}
+		}else{
+			return Vector3.zero;
+		}
+	}
+
+	
+	public Vector3 GetProjectedPoint(Vector3 point){
+		RaycastHit hitRay;
+		point.y += 1f;
+		Physics.Raycast(point, Vector3.down, out hitRay, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+		return hitRay.point;
+	}
+	
+	public Vector3 GetCorrectedFutureStairWalkingGoal(Frame frame, Transform root, Vector3 point, string sensorName, bool mirrored){
+		if(GetHomogeneousNoiseStatus()) return GetEvenCorrectedFutureStairWalkingGoal(frame, point, mirrored, sensorName);
+		else return GetCorrectedPointWithStepNoise(root, point, mirrored);
+	}
+
+
+	public Vector3 GetEvenCorrectedFutureStairWalkingGoal(Frame frame, Vector3 point, bool mirrored, string sensorName){
+		Sensor sensor = GetSensor(sensorName);
+		Vector3 correctionOffset = Vector3.zero;
+		RaycastHit contactRay;
+		Vector3 pointMovedUp = Vector3.zero;
+		/*
+		pointMovedUp.y += 1f;
+		Physics.Raycast(pointMovedUp, Vector3.down, out contactRay, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
+		return contactRay.point;
+		*/
+		if(sensor.GetContact(frame, mirrored) > 0){
+			correctionOffset = GetContactCorrectionVector(frame, mirrored, sensorName);
+			pointMovedUp = point + correctionOffset;
+			pointMovedUp.y += 1f;
+			Physics.Raycast(pointMovedUp, Vector3.down, out contactRay, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
+			return contactRay.point;
+		}else{
+			pointMovedUp = point;
+			pointMovedUp.y += 1f;
+			Physics.Raycast(pointMovedUp, Vector3.down, out contactRay, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
+			return contactRay.point;
+		}
+	}
+
+	public Vector3 GetFrameCorrectionVector(Frame frame, Vector3 originalPoint, bool mirrored, string sensorName){
+		Sensor sensor = GetSensor(sensorName);
+		Debug.DrawLine(originalPoint, frame.GetBoneTransformation(sensorName, mirrored).GetPosition(), Color.cyan, 10f);
+		return originalPoint - frame.GetBoneTransformation(sensorName, mirrored).GetPosition();
+	}
+
+	public Vector3 GetFrameYCorrectionVector(MotionEditor editor, Vector3 originalPoint, bool mirrored, string sensorName){
+		Sensor sensor = GetSensor(sensorName);
+		float frameYPosition = editor.GetActor().GetBoneTransformation(sensorName).GetPosition().y;
+		float Ydifference = 0f;
+		Vector3 YVector = Vector3.up;
+		/*if(originalPoint.y > frameYPosition){
+			Ydifference = originalPoint.y - frameYPosition;
+			YVector *= -Ydifference;
+		}else{
+			Ydifference = frameYPosition - originalPoint.y;
+			YVector *= Ydifference;
+		}*/
+		Debug.DrawLine(originalPoint, editor.GetActor().GetBoneTransformation(sensorName).GetPosition(), Color.magenta, 1f);
+		Ydifference = originalPoint.y - frameYPosition;
+		YVector *= -Ydifference;
+		return YVector;
+	}
+	
+	public Vector3 GetContactCorrectionVector(Frame frame, bool mirrored, string sensorName){
+		Sensor sensor = GetSensor(sensorName);
+		return sensor.GetCorrectedContactPoint(frame, mirrored) - sensor.GetContactPoint(frame, mirrored);
+	}
+
+	public bool GetHomogeneousNoiseStatus(Transform transform){
+		return GetParentStaircase().GetComponent<NoiseStepsEvenDifferent>().UseEvenNoise;
+	}
+
+	public bool GetHomogeneousNoiseStatus(){
+		return GameObject.Find("StairsNoise").GetComponent<NoiseMenu>().UseEvenNoise;
+	}
+
+	public Transform GetParentStaircase(){
+		NoiseStepsEvenDifferent parentStaircase = GameObject.FindObjectOfType<NoiseStepsEvenDifferent>();
+		//Debug.Log("Object = " + Stairs.name);
+		//if(transform.GetComponent<NoiseStepsEvenDifferent>() != null) return transform;
+		//else return GetParentStaircase(transform.parent.transform);
+		return parentStaircase.transform;
+	}
+
+	public Vector3 GetCorrectedPointWithEvenNoise(Frame frame, Transform root, Vector3 point, string sensorName, bool mirrored){
+		Sensor sensor = GetSensor(sensorName);
+		//string treadName = sensor.GetFutureContactColliderName(frame, mirrored);
+		string treadName = sensor.GetContactColliderName(frame, mirrored);
+		if(treadName != "Ground"){
+			GameObject tread = GameObject.Find(treadName);
+			Vector3 treadRight = tread.transform.right;
+			if(mirrored) treadRight *= -1f; // Adjust for mirroring
+			float direction = Vector3.Dot(root.forward, treadRight);
+			//Debug.Log("Direction = " + direction);
+			//Debug.DrawRay(point, treadRight, Color.cyan, 1f);
+			
+			// Width noise
+			Transform parentStaircase = GetParentStaircase();
+			float randomNumber = parentStaircase.GetComponent<NoiseStepsEvenDifferent>().GetRandomNumberOfStairs();
+			Vector3 scaleVector = tread.GetComponent<StepData>().DefaultScale;
+			float XNoise = (tread.GetComponent<StepData>().MaxScaleNoise.x - 1f) * randomNumber;
+			scaleVector.x = scaleVector.x * (1f + XNoise);
+			
+			//Debug.Log("direction = " + direction);
+			if(direction > 0) treadRight *= -1f; // Adjust for descending
+			RaycastHit[] TreadHits = Physics.RaycastAll(tread.transform.position, treadRight, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+			float cummulativeDistanceOffset = 0f;
+			foreach(RaycastHit hit in TreadHits){
+				//Debug.Log("Hit = " + hit.collider.name);
+				if(hit.collider.name != "Ground"){
+					StepData hitData = hit.collider.GetComponent<StepData>();
+					if(hitData.DefaultScale.x < 1f){ 
+						cummulativeDistanceOffset += ((1f + XNoise) * hitData.DefaultScale.x - hitData.DefaultScale.x) / 8f;
+					}
+				}
+			}
+
+			float directionMultiplier = 1f;
+			if(direction < 0) directionMultiplier = -1f;
+			int NoiseType = parentStaircase.GetComponent<NoiseStepsEvenDifferent>().NoiseType;
+			if(NoiseType == 2 || NoiseType == 3){
+				cummulativeDistanceOffset += (((1f + XNoise) * tread.GetComponent<StepData>().DefaultScale.x - tread.GetComponent<StepData>().DefaultScale.x) / 2f);
+				point += directionMultiplier * treadRight.normalized * cummulativeDistanceOffset;
+			}
+
+			// Height noise
+			/*
+			RaycastHit TreadHit;
+			Vector3 pointOfsettedUp = point;
+			pointOfsettedUp.y += 1f;
+			Physics.Raycast(pointOfsettedUp, Vector3.down, out TreadHit, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
+			point = TreadHit.point;
+			//point += sensor.GetPivot(frame, mirrored);
+			//point.y += 0.08f;
+			*/
+
+			
+			float scaledTreadHeight = 0f;
+			float originalTreadHeight = 0f;
+
+			scaledTreadHeight = tread.transform.localPosition.y;
+			originalTreadHeight = tread.GetComponent<StepData>().DefaultPosition.y;
+			float YTreadOffset = -Mathf.Abs(scaledTreadHeight - originalTreadHeight);
+			point += YTreadOffset * root.up;
+		}
+		
+
+		return point;
+	}
+
 	public Vector3 GetCorrectedPointWithStepNoise(Transform root, Vector3 point, bool mirrored){
 		//Sensor sensor = GetSensor(SensorName);
 		RaycastHit contactRay;
@@ -537,12 +802,18 @@ public class ContactModule : Module {
 		Vector3 pointMovedUp = point;
 		pointMovedUp.y += 1f;
 		Physics.Raycast(pointMovedUp, Vector3.down, out contactRay, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
-		if(contactRay.transform.localScale.x < 1f){
+		//contactRay.transform.localScale.x < 1f
+		if(contactRay.transform.tag == "Tread"){
 			// Get Depth and Height Tread offsets according to Step variation
-			originalTreadSize = contactRay.collider.gameObject.GetComponent<NoiseSteps>().DefaultScale.x;
+			if(contactRay.collider.gameObject.GetComponent<StepData>() == null){
+				originalTreadSize = 0f;
+				originalTreadHeight = 0f;
+			}else{
+				originalTreadSize = contactRay.collider.gameObject.GetComponent<StepData>().DefaultScale.x;
+				originalTreadHeight = contactRay.collider.gameObject.GetComponent<StepData>().DefaultPosition.y;
+			}
 			scaledTreadSize = contactRay.transform.localScale.x;
 			XTreadOffset = scaledTreadSize - originalTreadSize;
-			originalTreadHeight = contactRay.collider.gameObject.GetComponent<NoiseSteps>().DefaultPosition.y;
 			scaledTreadHeight = contactRay.transform.localPosition.y;
 			YTreadOffset = -Mathf.Abs(scaledTreadHeight - originalTreadHeight);
 			
@@ -555,6 +826,10 @@ public class ContactModule : Module {
 		}else{
 			XTreadOffset = 0f;
 			YTreadOffset = 0f;
+		}
+
+		if(contactRay.transform.localScale.x > 2f){
+			XTreadOffset = 0f;
 		}
 		
 		//Debug.DrawRay(contactRay.point, XDirection, Color.blue, 1f);
@@ -610,14 +885,19 @@ public class ContactModule : Module {
 						Frame reference = Data.GetFrame(j);
 						//Vector3 HorizontalOffset = Sensors[i].GetHorizontalStepOffsetVector(reference, editor.Mirror);
 						Vector3 FutureGoalPoint = Sensors[i].GetFutureGoalPoint(reference, editor.Mirror);
-						FutureGoalPoint = GetCorrectedPointWithStepNoise(editor.GetActor().GetRoot(), FutureGoalPoint, editor.Mirror);
+						//Vector3 CorrectionOffset = Sensors[i].GetCorrectedContactPoint(reference, editor.Mirror) - Sensors[i].GetContactPoint(reference, editor.Mirror);
+						//FutureGoalPoint = GetCorrectedStraightStairWalkingStep(reference, editor.GetActor().GetRoot(), FutureGoalPoint, Sensors[i].GetName(), editor.Mirror);
+						FutureGoalPoint = GetProjectedPoint(FutureGoalPoint);
+						//FutureGoalPoint = GetCorrectedFutureStairWalkingGoal(reference, editor.GetActor().transform, FutureGoalPoint, Sensors[i].GetName(), editor.Mirror);
+						//FutureGoalPoint = GetCorrectedPointWithStepNoise(editor.GetActor().GetRoot(), FutureGoalPoint, editor.Mirror);
 						Debug.DrawRay(FutureGoalPoint, Sensors[i].GetFutureGoalDirection(reference, editor.Mirror), Color.red, 1f); // Printing Future direction
 						//FutureGoalPoint.y = Utility.GetHeight(FutureGoalPoint, LayerMask.GetMask("Ground","Interaction")); // Adapting according to vertical noise
 						//FutureGoalPoint = Sensors[i].ApplyHorizontalAndVerticalStepOffsets(reference, FutureGoalPoint, editor.Mirror);
 						//UltiDraw.DrawSphere(FutureGoalPoint + HorizontalOffset, Quaternion.identity, DrawScale*0.5f, colors[i]);
 						UltiDraw.DrawSphere(FutureGoalPoint, Quaternion.identity, DrawScale*0.5f, colors[i]);
 						//Debug.DrawRay(FutureGoalPoint + HorizontalOffset, Sensors[i].GetRegularDirection(reference, editor.Mirror), Color.red, 1f);
-						
+						//Debug.Log("Current Goal surface = " + Sensors[i].GetContactColliderName(reference, editor.Mirror));
+						//Debug.Log("Future Next Goal surface = " + Sensors[i].GetFutureContactColliderName(reference, editor.Mirror));
 					}
 				}
 			}
@@ -810,6 +1090,9 @@ public class ContactModule : Module {
 		public Vector3[] RegularFutureGoalPoints, InverseFutureGoalPoints = new Vector3[0];
 		public Vector3[] RegularFutureGoalDirections, InverseFutureGoalDirections = new Vector3[0];
 
+		public string[] RegularContactColliderNames, InverseContactColliderNames = new string[0];
+		public string[] RegularFutureGoalColliderNames, InverseFutureGoalColliderNames = new string[0];
+
 		public Sensor(ContactModule module, int bone, Vector3 offset, float threshold, float tolerance, float velocity, ID capture, ID edit) {
 			Module = module;
 			Bone = bone;
@@ -831,6 +1114,10 @@ public class ContactModule : Module {
 			InverseDirections = new Vector3[Module.Data.Frames.Length];
 			RegularFutureGoalDirections = new Vector3[Module.Data.Frames.Length];
 			InverseFutureGoalDirections = new Vector3[Module.Data.Frames.Length];
+			RegularContactColliderNames = new string[Module.Data.Frames.Length];
+			InverseContactColliderNames = new string[Module.Data.Frames.Length];
+			RegularFutureGoalColliderNames = new string[Module.Data.Frames.Length];
+			InverseFutureGoalColliderNames = new string[Module.Data.Frames.Length];
 		}
 
 		public string GetName() {
@@ -868,6 +1155,14 @@ public class ContactModule : Module {
 
 		public Vector3 GetFutureGoalDirection(Frame frame, bool mirrored){
 			return mirrored ? InverseFutureGoalDirections[frame.Index-1] : RegularFutureGoalDirections[frame.Index-1];
+		}
+
+		public string GetContactColliderName(Frame frame, bool mirrored){
+			return mirrored ? InverseContactColliderNames[frame.Index-1] : RegularContactColliderNames[frame.Index-1];
+		}
+
+		public string GetFutureContactColliderName(Frame frame, bool mirrored){
+			return mirrored ? InverseFutureGoalColliderNames[frame.Index-1] : RegularFutureGoalColliderNames[frame.Index-1];
 		}
 
 		public Vector3 GetCorrectedPointWithStepNoise(Transform root, Vector3 point, bool mirrored){
@@ -924,7 +1219,11 @@ public class ContactModule : Module {
 			Vector3 XDirection = Vector3.zero;
 			Physics.Raycast(contactPoint, Vector3.down, out contactRay, float.PositiveInfinity);
 			if(contactRay.transform.localScale.x < 1f){
-				originalTreadSize = contactRay.collider.gameObject.GetComponent<NoiseSteps>().DefaultScale.x;
+				if(contactRay.collider.gameObject.GetComponent<StepData>() == null){
+					originalTreadSize = 0f;
+				}else{
+					originalTreadSize = contactRay.collider.gameObject.GetComponent<StepData>().DefaultScale.x;
+				}
 				scaledTreadSize = contactRay.transform.localScale.x;
 				XTreadOffset = scaledTreadSize - originalTreadSize;
 			}else{
@@ -953,7 +1252,7 @@ public class ContactModule : Module {
 			//Vector3 XDirection = Vector3.zero;
 			Physics.Raycast(contactPoint, Vector3.down, out contactRay, float.PositiveInfinity);
 			if(contactRay.transform.localScale.x < 1f){
-				originalTreadSize = contactRay.collider.gameObject.GetComponent<NoiseSteps>().DefaultScale.x;
+				originalTreadSize = contactRay.collider.gameObject.GetComponent<StepData>().DefaultScale.x;
 				scaledTreadSize = contactRay.transform.localScale.x;
 				XTreadOffset = scaledTreadSize - originalTreadSize;
 			}else{
@@ -1346,10 +1645,13 @@ public class ContactModule : Module {
 					}
 				}
 				bool hit = Utility.GetMostCommonItem(contacts);
+
 				if(hit) {
 					RegularContacts[frame.Index-1] = 1f;
 					RegularDistances[frame.Index-1] = Utility.GetMostCenteredVector(distances, contacts);
 					RegularContactPoints[frame.Index-1] = Utility.GetMostCenteredVector(contactPoints, contacts);
+					//Vector3 pivot = editor.Mirror ? GetPivot(frame, false).GetMirror(frame.Data.MirrorAxis) : GetPivot(frame, false);
+					//CaptureColliderName(frame, editor, pivot);
 
 				} else {
 					RegularContacts[frame.Index-1] = 0f;
@@ -1379,6 +1681,8 @@ public class ContactModule : Module {
 					InverseContacts[frame.Index-1] = 1f;
 					InverseDistances[frame.Index-1] = Utility.GetMostCenteredVector(distances, contacts);
 					InverseContactPoints[frame.Index-1] = Utility.GetMostCenteredVector(contactPoints, contacts);
+					//Vector3 pivot = editor.Mirror ? GetPivot(frame, true) : GetPivot(frame, true).GetMirror(frame.Data.MirrorAxis);
+					//CaptureColliderName(frame, editor, pivot);
 				} else {
 					InverseContacts[frame.Index-1] = 0f;
 					InverseDistances[frame.Index-1] = Vector3.zero;
@@ -1400,6 +1704,34 @@ public class ContactModule : Module {
 						InverseDistances[frame.Index-1] = Vector3.zero;
 					}
 				}
+			}
+		}
+
+		public void CaptureColliderName(Frame frame, MotionEditor editor, Vector3 pivot){
+			//Vector3 origin = editor.GetActor().GetBoneTransformation(GetName()).GetPosition();
+			RaycastHit surfaceHit;
+			pivot.y += 1f;
+			Physics.Raycast(pivot, Vector3.down, out surfaceHit, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+			if(pivot ==  null || surfaceHit.collider == null){
+				if(editor.Mirror) InverseContactColliderNames[frame.Index-1] = "NoContact";
+				else RegularContactColliderNames[frame.Index-1] = "NoContact";
+			}else{
+				if(editor.Mirror) InverseContactColliderNames[frame.Index-1] = surfaceHit.collider.name;
+				else RegularContactColliderNames[frame.Index-1] = surfaceHit.collider.name;
+			}
+		}
+
+		public void CaptureFutureColliderName(Frame frame, MotionEditor editor, Vector3 pivot){
+			//Vector3 origin = editor.GetActor().GetBoneTransformation(GetName()).GetPosition();
+			RaycastHit surfaceHit;
+			pivot.y += 1f;
+			Physics.Raycast(pivot, Vector3.down, out surfaceHit, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+			if(pivot ==  null || surfaceHit.collider == null){
+				if(editor.Mirror) InverseFutureGoalColliderNames[frame.Index-1] = "NoContact";
+				else RegularFutureGoalColliderNames[frame.Index-1] = "NoContact";
+			}else{
+				if(editor.Mirror) InverseFutureGoalColliderNames[frame.Index-1] = surfaceHit.collider.name;
+				else RegularFutureGoalColliderNames[frame.Index-1] = surfaceHit.collider.name;
 			}
 		}
 
@@ -1473,6 +1805,7 @@ public class ContactModule : Module {
 				if(RegularContacts[frame.Index+j] != 0f){
 					RegularFutureGoalPoints[frame.Index-1] = RegularContactPoints[frame.Index+j];
 					RegularFutureGoalDirections[frame.Index-1] = RegularDirections[frame.Index+j];
+					//RegularFutureGoalColliderNames[frame.Index-1] = RegularContactColliderNames[frame.Index+j];
 					break;
 				}
 				/*if(j==start+1){
@@ -1485,6 +1818,7 @@ public class ContactModule : Module {
 				if(InverseContacts[frame.Index+j] != 0f){
 					InverseFutureGoalPoints[frame.Index-1] = InverseContactPoints[frame.Index+j];
 					InverseFutureGoalDirections[frame.Index-1] = InverseDirections[frame.Index+j];
+					//InverseFutureGoalColliderNames[frame.Index-1] = InverseContactColliderNames[frame.Index+j];
 					break;
 				}
 				/*if(j==start+1){
@@ -1499,10 +1833,14 @@ public class ContactModule : Module {
 				if(RegularFutureGoalPoints[i] == Vector3.zero && i != framesLength-1){
 					RegularFutureGoalPoints[i] = RegularFutureGoalPoints[i+1];
 					RegularFutureGoalDirections[i] = RegularFutureGoalDirections[i+1];
+					//RegularContactColliderNames[i] = RegularContactColliderNames[i+1];
+					RegularFutureGoalColliderNames[i] = RegularFutureGoalColliderNames[i+1];
 				}
 				if(InverseFutureGoalPoints[i] == Vector3.zero && i != framesLength-1){
 					InverseFutureGoalPoints[i] = InverseFutureGoalPoints[i+1];
 					InverseFutureGoalDirections[i] = InverseFutureGoalDirections[i+1];
+					//InverseContactColliderNames[i] = InverseContactColliderNames[i+1];
+					InverseFutureGoalColliderNames[i] = InverseFutureGoalColliderNames[i+1];
 				}
 			}
 		}

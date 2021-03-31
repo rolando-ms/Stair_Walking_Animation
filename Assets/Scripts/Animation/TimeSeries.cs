@@ -437,14 +437,14 @@ public class TimeSeries {
 
 			//Positions
 			for(int i=0; i<LeftFootTransformations.Length; i+=step) {
-				UltiDraw.DrawSphere(LeftFootTransformations[i].GetPosition(), Quaternion.identity, 0.025f, UltiDraw.Red);
+				//UltiDraw.DrawSphere(LeftFootTransformations[i].GetPosition(), Quaternion.identity, 0.025f, UltiDraw.Red);
 				if(LeftFootTransformations[i].GetPosition() == RightFootTransformations[i].GetPosition()){
 					//Debug.Log("Foot point " + i + " = " + LeftFootTransformations[i].GetPosition());
 				}
 			}
 
 			for(int i=0; i<RightFootTransformations.Length; i+=step) {
-				UltiDraw.DrawSphere(RightFootTransformations[i].GetPosition(), Quaternion.identity, 0.025f, UltiDraw.Yellow);
+				//UltiDraw.DrawSphere(RightFootTransformations[i].GetPosition(), Quaternion.identity, 0.025f, UltiDraw.Yellow);
 				//Debug.Log("Right Foot = " + RightFootTransformations[i].GetPosition());
 			}
 
@@ -511,12 +511,35 @@ public class TimeSeries {
 			}else{
 				leftContacts = CModule.GetSensor("LeftAnkle").RegularContacts;
 			}
+
+			float[] rightContacts = new float[RightFootTransformations.Length];
+			if(Editor.Mirror){
+				rightContacts = CModule.GetSensor("RightAnkle").InverseContacts;
+			}else{
+				rightContacts = CModule.GetSensor("RightAnkle").RegularContacts;
+			}
+
+			int currentFrameIndex = TimeSeries.GetPivot().Index;
 			for(int i=0; i<LeftFootTransformations.Length; i+=step) {
 				Vector3 LeftPosition = Vector3.zero;
-				if(leftContacts[i] > 0f){
-					LeftPosition = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), LeftFootTransformations[i].GetPosition(),Editor.Mirror);
+				if(leftContacts[i] > 0f || rightContacts[i] > 0f){
+					//LeftPosition = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), LeftFootTransformations[i].GetPosition(),Editor.Mirror);
+					//LeftPosition = CModule.GetCorrectedStraightStairWalkingStep(Editor.GetCurrentFrame(), Editor.GetActor().GetRoot(), 
+					//				LeftFootTransformations[i].GetPosition(), "LeftAnkle", Editor.Mirror);
+					/*
+					if(leftContacts[i] > 0f) LeftPosition = CModule.GetCorrectedStraightStairWalkingStep(Editor.GetCurrentFrame(), Editor.GetActor().GetRoot(), 
+									LeftFootTransformations[i].GetPosition(), "LeftAnkle", Editor.Mirror);
+					else if(rightContacts[i] > 0f) LeftPosition = LeftPosition = CModule.GetCorrectedStraightStairWalkingStep(Editor.GetCurrentFrame(), Editor.GetActor().GetRoot(), 
+									LeftFootTransformations[i].GetPosition(), "RightAnkle", Editor.Mirror);
+					*/
+					//LeftPosition = LeftFootTransformations[i].GetPosition();
+					//LeftPosition += CModule.GetFrameYCorrectionVector(Editor, LeftFootTransformations[currentFrameIndex].GetPosition(), Editor.Mirror, "LeftAnkle");
+					LeftPosition = GetLeftFootPosition(i);
+					LeftPosition += CModule.GetFrameYCorrectionVector(Editor, GetLeftFootPosition(currentFrameIndex), Editor.Mirror, "LeftAnkle");
 				}else{
 					LeftPosition = LeftFootTransformations[i].GetPosition();
+					//LeftPosition = LeftFootTransformations[i].GetPosition() + 
+					//			   CModule.GetFrameCorrectionVector(Editor.GetCurrentFrame(), LeftFootTransformations[i].GetPosition(), Editor.Mirror, "LeftAnkle");
 				}
 				//Vector3 newLeftPosition = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), LeftFootTransformations[i].GetPosition(),Editor.Mirror);
 				//UltiDraw.DrawSphere(LeftFootTransformations[i].GetPosition(), Quaternion.identity, 0.025f, UltiDraw.Red);
@@ -526,18 +549,26 @@ public class TimeSeries {
 				}
 			}
 
-			float[] rightContacts = new float[RightFootTransformations.Length];
-			if(Editor.Mirror){
-				rightContacts = CModule.GetSensor("RightAnkle").InverseContacts;
-			}else{
-				rightContacts = CModule.GetSensor("RightAnkle").RegularContacts;
-			}
 			for(int i=0; i<RightFootTransformations.Length; i+=step) {
 				Vector3 RightPosition = Vector3.zero;
-				if(rightContacts[i] > 0f){
-					RightPosition = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), RightFootTransformations[i].GetPosition(),Editor.Mirror);
+				if(rightContacts[i] > 0f || leftContacts[i] > 0f){
+					//RightPosition = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), RightFootTransformations[i].GetPosition(),Editor.Mirror);
+					//RightPosition = CModule.GetCorrectedStraightStairWalkingStep(Editor.GetCurrentFrame(), Editor.GetActor().GetRoot(), 
+					//				RightFootTransformations[i].GetPosition(), "RightAnkle", Editor.Mirror);
+					/*
+					if(rightContacts[i] > 0f) RightPosition = CModule.GetCorrectedStraightStairWalkingStep(Editor.GetCurrentFrame(), Editor.GetActor().GetRoot(), 
+									RightFootTransformations[i].GetPosition(), "RightAnkle", Editor.Mirror);
+					else if(leftContacts[i] > 0f) RightPosition = CModule.GetCorrectedStraightStairWalkingStep(Editor.GetCurrentFrame(), Editor.GetActor().GetRoot(), 
+									RightFootTransformations[i].GetPosition(), "LeftAnkle", Editor.Mirror);
+					*/
+					//RightPosition = RightFootTransformations[i].GetPosition();
+					//RightPosition += CModule.GetFrameYCorrectionVector(Editor, RightFootTransformations[currentFrameIndex].GetPosition(), Editor.Mirror, "RightAnkle");
+					RightPosition = GetRightFootPosition(i);
+					RightPosition += CModule.GetFrameYCorrectionVector(Editor, GetRightFootPosition(currentFrameIndex), Editor.Mirror, "RightAnkle");
 				}else{
 					RightPosition = RightFootTransformations[i].GetPosition();
+					//RightPosition = RightFootTransformations[i].GetPosition() + 
+					//				CModule.GetFrameCorrectionVector(Editor.GetCurrentFrame(), RightFootTransformations[i].GetPosition(), Editor.Mirror, "RightAnkle");
 				}
 				//Vector3 newRightPosition = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), RightFootTransformations[i].GetPosition(),Editor.Mirror);
 				//UltiDraw.DrawSphere(RightFootTransformations[i].GetPosition(), Quaternion.identity, 0.025f, UltiDraw.Yellow);
