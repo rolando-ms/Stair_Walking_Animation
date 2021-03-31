@@ -467,7 +467,7 @@ public class SIGGRAPH_Asia_2 : NeuralAnimation {
 
 		RaycastHit RootPosHit;
 		Vector3 RootPos = Actor.GetRoot().position;
-		RootPos += Actor.GetRoot().forward.normalized * 1f;
+		//RootPos += Actor.GetRoot().forward.normalized;// * 1f;
 		RootPos.y += 1f;
 		Physics.Raycast(RootPos, Vector3.down, out RootPosHit, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
 		float treadXScale = 100 * RootPosHit.transform.localScale.x;
