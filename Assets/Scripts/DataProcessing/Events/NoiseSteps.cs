@@ -20,6 +20,7 @@ public class NoiseSteps : SceneEvent {
 	//[Range(0,3)] public int noiseType = 3;
 	private int noiseType = 0;
 	private Vector3 NewPosition = Vector3.zero;
+	private Vector3 localPosition = Vector3.zero;
 
 	void Reset() {
 		DefaultPosition = transform.localPosition;
@@ -32,36 +33,20 @@ public class NoiseSteps : SceneEvent {
             Identity(editor);
             return;
         }
-		//Random.InitState(editor.GetCurrentSeed());
+
+		RaycastHit treadHit;
+		localPosition = transform.position;
+		localPosition.y += 1f;
+		Physics.Raycast(localPosition, Vector3.down, out treadHit, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+
+		//Transform parentTransform = GetStairsParentTransform(treadHit.transform);
+
+		//if(parentTransform.GetComponent<NoiseStepsEvenDifferent>() == null) noiseType = 0; 
+		//else if(parentTransform.GetComponent<NoiseStepsEvenDifferent>().UseEvenNoise) noiseType = 0;
+		//else noiseType = parentTransform.GetComponent<NoiseStepsEvenDifferent>().noiseType;
 		
-		//Object[] SceneObjects = GameObject.FindObjectsOfType(typeof(MonoBehaviour));
-		//Debug.Log("A total of " + SceneObjects.Length + " objects.");
-		/*foreach(Object obj in SceneObjects){
-			Debug.Log("Objects = " + obj.name);	
-		}
-		Debug.Log("Objects = " + SceneObjects[1]);*/
-		//Debug.Log("Scale x = " + transform.localScale.x);
-        
-		/* //Adds 2 Units to x scale and moves steps horizontaly
-		//Random.InitState(editor.GetCurrentSeed());
-		MaxScaleNoise.x = 1;
-		//MaxScaleNoise.x = 2f / DefaultScale.x;
-		Vector3 NewScale = new Vector3(DefaultScale.x + 2f, DefaultScale.y, DefaultScale.z);
-		transform.localScale = Vector3.Scale(NewScale, Utility.UniformVector3(MinScaleNoise, MaxScaleNoise));
-		//MinPositionNoise.x = -(((MaxScaleNoise.x - 1) * transform.localScale.x)/2f) - 1f; // Move by half the scale cause scale modifies position
-		//MinPositionNoise.x = 0;
-		MaxPositionNoise.x = DefaultScale.x / 4f;
-		Vector3 NewPosition = new Vector3(DefaultPosition.x - 1f, DefaultPosition.y, DefaultPosition.z);
-		transform.localPosition = NewPosition + Utility.UniformVector3(MinPositionNoise, MaxPositionNoise);
-        transform.localEulerAngles = DefaultRotation + Utility.UniformVector3(MinRotationNoise, MaxRotationNoise);
-		*/
-
-		//MaxScaleNoise.x = 1.5f;
-		//MinPositionNoise.x = 0;
-		//MaxPositionNoise.x = 0;
-
 		// Default/0 = No noise ; 1 = Height noise ; 2 = Depth noise ; 3 = Height/Depth Noise
-		noiseType = 3;
+		noiseType = 0;
 
 		MaxScaleNoise.x = 1;
 		switch(noiseType){
@@ -115,5 +100,17 @@ public class NoiseSteps : SceneEvent {
         transform.localEulerAngles = DefaultRotation;
         transform.localScale = DefaultScale;
 	}
+
+	private Transform GetStairsParentTransform(Transform transform){
+		//Debug.Log(transform.name);
+		//if(transform.name.StartsWith("Tread")) Debug.Log("Tread!!!!!!");
+		if(transform.name.StartsWith("Stairs")){
+			return transform;
+		}
+		else{
+			return GetStairsParentTransform(transform.parent.transform);
+		}
+	}
+
 }
 #endif
