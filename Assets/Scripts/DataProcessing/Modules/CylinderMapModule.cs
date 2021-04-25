@@ -45,14 +45,14 @@ public class CylinderMapModule : Module {
 			if(HeightOffset == 0f){
 				sensor.Sense(Matrix4x4.TRS(position + new Vector3(0f, 0f, 0f), rotation, Vector3.one), Mask);
 			} else{
-				sensor.Sense(editor, Matrix4x4.TRS(position + new Vector3(0f, 0f, 0f), rotation, Vector3.one), Mask, HeightOffset);
+				sensor.Sense(editor.GetActor(), Matrix4x4.TRS(position + new Vector3(0f, 0f, 0f), rotation, Vector3.one), Mask, HeightOffset);
 			}
 			
 		} else {
 			if(HeightOffset == 0f){
 				sensor.Sense(frame.GetBoneTransformation(0, mirrored), Mask);
 			} else{
-				sensor.Sense(editor, frame.GetBoneTransformation(0, mirrored), Mask, HeightOffset);
+				sensor.Sense(editor.GetActor(), frame.GetBoneTransformation(0, mirrored), Mask, HeightOffset);
 			}
 		}
 		Samples = sensor.Points.Length;
@@ -64,7 +64,7 @@ public class CylinderMapModule : Module {
 		if(HeightOffset == 0f){
 			sensor.Draw(Color, DrawReferences, DrawDistribution);
 		} else{
-			sensor.Draw(editor, Color, HeightOffset, DrawReferences, DrawDistribution);
+			sensor.Draw(editor.GetActor(), Color, HeightOffset, DrawReferences, DrawDistribution);
 		}
 		
 	}

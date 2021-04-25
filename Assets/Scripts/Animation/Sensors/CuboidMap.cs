@@ -77,6 +77,32 @@ public class CuboidMap {
         }
 	}
 
+    public void Sense(Actor actor, Matrix4x4 pivot, LayerMask mask, Vector3 size, float heightOffset, float smoothing=0f) {
+		Pivot = Utility.Interpolate(Pivot, pivot, 1f-smoothing);
+        Size = smoothing*Size + (1f-smoothing)*size;
+
+		Vector3 pivotPosition = Pivot.GetPosition();
+		Quaternion pivotRotation = Pivot.GetRotation();
+        Vector3 sensorPosition = pivot.GetPosition();
+        Quaternion sensorRotation = pivot.GetRotation();
+        sensorPosition.y = heightOffset + actor.GetRoot().position.y;
+        pivotPosition.y = sensorPosition.y;
+        Vector3 step = GetStep();
+        float range = Mathf.Max(step.x, step.y, step.z);
+        for(int i=0; i<Points.Length; i++) {
+            if(Size == Vector3.zero) {
+                References[i] = pivotPosition;
+                Occupancies[i] = 0f;
+            } else {
+                References[i] = pivotPosition + pivotRotation * Vector3.Scale(Points[i], Size);
+                Vector3 sensor = sensorPosition + sensorRotation * Vector3.Scale(Points[i], Size);
+                Collider c;
+                Vector3 closest = Utility.GetClosestPointOverlapBox(sensor, step/2f, sensorRotation, mask, out c);
+                Occupancies[i] = smoothing*Occupancies[i] + (1f-smoothing)*(c == null ? 0f : 1f - Vector3.Distance(sensor, closest) / range);
+            }
+        }
+	}
+
     public void Retransform(Matrix4x4 pivot) {
         Pivot = pivot;
 		Vector3 position = Pivot.GetPosition();
@@ -88,6 +114,23 @@ public class CuboidMap {
 
 	public void Draw(Color color) {
 		Vector3 position = Pivot.GetPosition();
+		Quaternion rotation = Pivot.GetRotation();
+        UltiDraw.Begin();
+        Vector3 step = GetStep();
+		if(Size != Vector3.zero) {
+            UltiDraw.DrawWireCuboid(position, rotation, Size, color);
+            for(int i=0; i<Points.Length; i++) {
+                if(Occupancies[i] > 0f) {
+                    UltiDraw.DrawCuboid(References[i], rotation, step, Color.Lerp(UltiDraw.None, color, Occupancies[i]));
+                }
+            }
+		}
+        UltiDraw.End();
+	}
+
+    public void Draw(Actor actor, Color color, float heightOffset) {
+		Vector3 position = Pivot.GetPosition();
+        position.y = heightOffset + actor.GetRoot().position.y;
 		Quaternion rotation = Pivot.GetRotation();
         UltiDraw.Begin();
         Vector3 step = GetStep();
