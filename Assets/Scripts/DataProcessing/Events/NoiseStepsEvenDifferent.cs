@@ -21,8 +21,6 @@ public class NoiseStepsEvenDifferent : SceneEvent {
 	public Vector3 MinScaleNoise = Vector3.one;
 	public Vector3 MaxScaleNoise = Vector3.one;
 
-	[SerializeField] private float[] TreadWidths = new float[18];
-
     [Tooltip("0 = No noise, 1 = Height noise, 2 = Width noise, 3 = Height/Width noise")]
 	[Range(0,3)]
 	public int NoiseType = 0;
@@ -31,6 +29,8 @@ public class NoiseStepsEvenDifferent : SceneEvent {
 	private float randomNumber = 0f;
 
 	private bool stop = false;
+
+	private ContactModule.RootSensor rootSensor;
 
 	void Reset() {
 		DefaultPosition = transform.localPosition;
@@ -48,6 +48,13 @@ public class NoiseStepsEvenDifferent : SceneEvent {
             return;
         }
 
+		ContactModule contactModule = (ContactModule)editor.GetData().GetModule(Module.ID.Contact);
+		rootSensor = contactModule.rootSensor;
+		string treadName = rootSensor.GetRootContactTreadName(editor.GetCurrentFrame(), editor.Mirror);
+		Vector3 LocalContact = rootSensor.GetRootLocalXContact(editor.GetCurrentFrame(), editor.Mirror);
+		//Debug.Log("Steps tread Name = " + treadName);
+		//Debug.Log("Steps local Value = " + LocalContact);
+
 		NoiseMenu noiseMenu = GameObject.Find("StairsNoise").GetComponent<NoiseMenu>();
 		ResetToOriginal = noiseMenu.ResetToOriginal;
 		UseEvenNoise = noiseMenu.UseEvenNoise;
@@ -62,14 +69,31 @@ public class NoiseStepsEvenDifferent : SceneEvent {
                 //Debug.Log("Child reseted = " + childTransform.name);
             }
 		}else if(UseEvenNoise){
+
+			RaycastHit hitRay;
+			Vector3 rootOffseted = editor.GetActor().GetRoot().position;
+			rootOffseted.y += 1f;
+			Physics.Raycast(rootOffseted, Vector3.down, out hitRay, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+
 			randomNumber = Random.value;
-			for(int i = 0; i < transform.childCount; i++){
-                Transform childTransform = GetChildTransform(transform.GetChild(i));
-				//!!!if(!stop) UpdateStairsHeight(childTransform);
-				//ResetChild(childTransform);
-                //Debug.Log("Child name = " + childTransform.name);
-                ApplyHomogeneousStepNoise(editor, childTransform, randomNumber);
-            }
+			if(hitRay.collider.name != rootSensor.GetLastTreadName() && hitRay.transform.localScale.x < 2.5f){
+				for(int i = 0; i < transform.childCount; i++){
+					Transform childTransform = GetChildTransform(transform.GetChild(i));
+					ApplyHomogeneousStepNoise(editor, childTransform, randomNumber);
+				}
+			}else{
+				for(int i = 0; i < transform.childCount; i++){
+					Transform childTransform = GetChildTransform(transform.GetChild(i));
+					ResetChild(childTransform);
+				}
+			}
+
+			if(treadName != "Ground"){
+				//Debug.Log("Steps tread Name = " + treadName);
+				MoveStairsUnderRoot(treadName, LocalContact, editor.GetActor().GetRoot().position);
+			}else{
+				transform.position = Vector3.zero;
+			}
 			/*for(int i = 0; i < transform.childCount; i++){
 				Transform childTransform = GetChildTransform(transform.GetChild(i));
 				if(childTransform.name == "Tread"){
@@ -111,6 +135,27 @@ public class NoiseStepsEvenDifferent : SceneEvent {
         else return GetChildTransform(childTransform.GetChild(0));
     }
 
+	private Transform GetTreadTransform(string treadName){
+		GameObject Tread = GameObject.Find(treadName);
+		return Tread.transform;
+	}
+
+	private void MoveStairsUnderRoot(string targetTreadName, Vector3 pointWRTTread, Vector3 rootPoint){
+		Transform targetTread = GetTreadTransform(targetTreadName);
+		Vector3 pointWRTWorld = targetTread.GetWorldMatrix().MultiplyPoint(pointWRTTread);
+		//Debug.DrawRay(pointWRTWorld, Vector3.up, Color.yellow, 1f);
+
+		Vector3 XOffsetVector = pointWRTWorld - rootPoint;
+		XOffsetVector.y = 0;
+		XOffsetVector.z = 0;
+
+		// Moving on X axis
+		//Vector3 offsetPosition = Vector3.zero;
+		//offsetPosition.x -= distance;
+		transform.position -= XOffsetVector;
+		//DrawPlane(rootPoint, Vector3.right, Color.red);
+	}
+
 	private void ApplySequentialEvenStepNoise(Transform treadTransform, int treadNumber){
 		//
 	}
@@ -144,6 +189,12 @@ public class NoiseStepsEvenDifferent : SceneEvent {
 		Vector3 scaleVector = stepData.DefaultScale;
 		float XNoise = (MaxScaleNoise.x - 1f) * randomNumber;
 		//XNoise = 1f;
+		float direction = 1f;
+		//Debug.DrawRay(editor.GetActor().GetRoot().position, editor.GetActor().GetRoot().forward, Color.yellow, 1f);
+		float rootTreadDotProduct = Vector3.Dot(editor.GetActor().GetRoot().forward, stepData.transform.right);
+		//Debug.Log("dot Product = " + rootTreadDotProduct);
+		if(rootTreadDotProduct > 0f) direction = -1f;
+
 		float offsetWeight = 1f;
 		if(XNoise < 0) offsetWeight = 1.1f; // To avoid gaps between treads
 		scaleVector.x = scaleVector.x * (1f + XNoise); // * stepData.DefaultScale.x;
@@ -193,7 +244,7 @@ public class NoiseStepsEvenDifferent : SceneEvent {
 					//if(stepData.DefaultScale.x < 3f)
 					//	cummulativeDistanceOffset += (((1f + XNoise) * stepData.DefaultScale.x - stepData.DefaultScale.x) / 2f);
 						
-					newPos.x = stepData.DefaultPosition.x - cummulativeDistanceOffset;
+					newPos.x = stepData.DefaultPosition.x - (direction * cummulativeDistanceOffset);
 				}
 				if(stepData.DefaultScale.x < 3f)
 				childTransform.localScale = new Vector3(scaleVector.x, stepData.DefaultScale.y, stepData.DefaultScale.z);
@@ -204,7 +255,7 @@ public class NoiseStepsEvenDifferent : SceneEvent {
 				//if(stepData.DefaultScale.x < 3f)
 				//	cummulativeDistanceOffset += (((1f + XNoise) * stepData.DefaultScale.x - stepData.DefaultScale.x) / 2f);
 					
-				newPos.x = stepData.DefaultPosition.x - cummulativeDistanceOffset;
+				newPos.x = stepData.DefaultPosition.x - (direction * cummulativeDistanceOffset);
 				//}
 				if(stepData.DefaultScale.x < 3f) 
 				childTransform.localScale = new Vector3(scaleVector.x, stepData.DefaultScale.y, stepData.DefaultScale.z);
@@ -287,6 +338,5 @@ public class NoiseStepsEvenDifferent : SceneEvent {
 				break;
 		}
     }
-
 }
 #endif
