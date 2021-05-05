@@ -20,7 +20,10 @@ public class RayTest : MonoBehaviour
         PointV4[2] = hitRay.point[2];
         Matrix4x4 targetMatrix = targetTransform.GetWorldMatrix();
         Vector3 transformedPoint = targetMatrix.inverse.MultiplyPoint(hitRay.point);//targetTransform.GetWorldMatrix().MultiplyPoint(hitRay.point);
-        Debug.Log("Target Object position = " + targetTransform.position + " transformed point = " + transformedPoint);
+
+        Vector3 backTransformedPoint = targetMatrix.MultiplyPoint(transformedPoint);
+
+        Debug.Log("Target Object position = " + targetTransform.position + " transformed point = " + transformedPoint + " back transformed point = " + backTransformedPoint);
     }
 }
 #endif
