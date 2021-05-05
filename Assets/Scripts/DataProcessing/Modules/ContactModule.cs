@@ -21,6 +21,7 @@ public class ContactModule : Module {
 	public bool ContactTrajectories = false;
 	public bool ShowFutureGoalPoints = false;
 	public bool useSteps = true;
+	public bool IKTest = false;
 
 	//public bool ShowSkeletons = false;
 	//public int SkeletonStep = 10;
@@ -30,6 +31,7 @@ public class ContactModule : Module {
 	public float CaptureFilter = 0.1f;
 	public float EditFilter = 0.1f;
 	public Sensor[] Sensors = new Sensor[0];
+	public RootSensor rootSensor = new RootSensor(null);
 	public BakedContacts BakedContacts = null;
 
 	public float PastTrajectoryWindow = 1f;
@@ -108,6 +110,11 @@ public class ContactModule : Module {
 		Sensor sensor = new Sensor(this, Data.Source.FindBone(bone).Index, offset, threshold, tolerance, velocity, capture, edit);
 		ArrayExtensions.Add(ref Sensors, sensor);
 		return sensor;
+	}
+
+	public void AddRootSensor(){
+		rootSensor = new RootSensor(this);
+		//return rootSensor;
 	}
 
 	public void RemoveSensor(Sensor sensor) {
@@ -225,6 +232,9 @@ public class ContactModule : Module {
 			Debug.Log("Different height!");
 		}*/
 		//Matrix4x4.TRS(bone.GetPosition() + Utility.FilterGaussian(distances, contacts), bone.GetRotation(), Vector3.one);
+		string colliderName = rootSensor.GetRootContactTreadName(frame, mirrored);
+		//Debug.Log("Root Collider Name = " + colliderName);
+		//Debug.Log("Root Local point = " + rootSensor.GetRootLocalXContact(frame, editor.Mirror));
 
 		List<Matrix4x4> targets = new List<Matrix4x4>();
 		for(int i=0; i<Sensors.Length; i++) {
@@ -248,12 +258,31 @@ public class ContactModule : Module {
 							//correctedPosition += Vector3.up.normalized * 0.08f; // Ankle offset
 					//	}
 					//}
+					
+					//if(Sensors[i].GetName() == "LeftAnkle"){
+					//	string colliderName = Sensors[i].GetRootContactTreadName(frame, mirrored);
+					//	Debug.Log("Root Collider Name = " + colliderName);
+					//}
+					correctedPosition = GetCorrectedPointWithRelativeContacts(frame, Sensors[i].GetName(), mirrored);
 					correctedMatrix = Matrix4x4.TRS(correctedPosition, correctedTransformation.GetRotation(), Vector3.one);
 				}else{
 					correctedMatrix = Matrix4x4.TRS(correctedTransformation.GetPosition(), correctedTransformation.GetRotation(), Vector3.one);	
 				}
+				if(IKTest){
+					Vector3 position = Vector3.zero;
+					if(Sensors[i].GetName() == "LeftAnkle"){
+						GameObject leftStep = GameObject.Find("LeftStep");
+						position = leftStep.transform.position;
+						position.y += leftStep.transform.localScale.y / 2f;
+					}else if(Sensors[i].GetName() == "RightAnkle"){
+						GameObject rightStep = GameObject.Find("RightStep");
+						position = rightStep.transform.position;
+						position.y += rightStep.transform.localScale.y / 2f;
+					}
+					position.y = correctedTransformation.GetPosition().y;
+					correctedMatrix = Matrix4x4.TRS(position, correctedTransformation.GetRotation(), Vector3.one);
+				}
 				//correctedMatrix = Matrix4x4.TRS(correctedTransformation.GetPosition() + HorizontalOffset, correctedTransformation.GetRotation(), Vector3.one);
-				correctedMatrix = Matrix4x4.TRS(correctedTransformation.GetPosition(), correctedTransformation.GetRotation(), Vector3.one);
 				targets.Add(rotationZ * correctedMatrix);
 			}
 		}
@@ -322,7 +351,21 @@ public class ContactModule : Module {
 			Sensors[s].InverseContactColliderNames = new string[Data.Frames.Length];
 			Sensors[s].RegularFutureGoalColliderNames = new string[Data.Frames.Length];
 			Sensors[s].InverseFutureGoalColliderNames = new string[Data.Frames.Length];
+
+			//Relative data
+			Sensors[s].RegularRelativeContactPoints = new Vector3[Data.Frames.Length];
+			Sensors[s].InverseRelativeContactPoints = new Vector3[Data.Frames.Length];
+			Sensors[s].RegularRelativeFutureGoalPoints = new Vector3[Data.Frames.Length];
+			Sensors[s].InverseRelativeFutureGoalPoints = new Vector3[Data.Frames.Length];
+
 		}
+		
+		//Root Data
+		//rootSensor = new RootSensor(this);
+		rootSensor.RegularContactTreads = new string[Data.Frames.Length];
+		rootSensor.InverseContactTreads = new string[Data.Frames.Length];
+		rootSensor.RegularLocalXContacts = new Vector3[Data.Frames.Length];
+		rootSensor.InverseLocalXContacts = new Vector3[Data.Frames.Length];
 		System.DateTime time = Utility.GetTimestamp();
 		//int count = 0;
 		for(int i=0; i<Data.Frames.Length; i++) {
@@ -336,8 +379,14 @@ public class ContactModule : Module {
 					Vector3 point = editor.Mirror ? Sensors[s].InverseContactPoints[frame.Index-1] : Sensors[s].RegularContactPoints[frame.Index-1];
 					Sensors[s].CaptureColliderName(frame, editor, point);
 					Sensors[s].CaptureFutureColliderName(frame, editor, point);
+					Sensors[s].CaptureRelativeToTreadContactPoints(frame, editor, point);
+					Sensors[s].CaptureRelativeToTreadFutureGoalPoints(frame, editor, point);
 				}
 			}
+			rootSensor.CaptureTreadName(frame, editor);
+			rootSensor.CaptureLocalXContact(frame, editor);
+			rootSensor.CaptureFirstTread(frame, editor);
+			rootSensor.CaptureLastTread(frame, editor);
 			//if(count > Step) {
 			if(Utility.GetElapsedTime(time) > 0.2f) {
 				time = Utility.GetTimestamp();
@@ -357,7 +406,11 @@ public class ContactModule : Module {
 					Vector3 point = editor.Mirror ? Sensors[s].InverseContactPoints[frame.Index-1] : Sensors[s].RegularContactPoints[frame.Index-1];
 					Sensors[s].CaptureColliderName(frame, editor, point);
 					Sensors[s].CaptureFutureColliderName(frame, editor, point);
+					Sensors[s].CaptureRelativeToTreadContactPoints(frame, editor, point);
+					Sensors[s].CaptureRelativeToTreadFutureGoalPoints(frame, editor, point);
 				}
+				rootSensor.CaptureTreadName(frame, editor);
+				rootSensor.CaptureLocalXContact(frame, editor);
 				//if(count > Step) {
 				if(Utility.GetElapsedTime(time) > 0.2f) {
 					time = Utility.GetTimestamp();
@@ -789,6 +842,42 @@ public class ContactModule : Module {
 		return point;
 	}
 
+	public Vector3 GetCorrectedPointWithRelativeContacts(Frame frame, string sensorName, bool mirrored){
+		Sensor sensor = GetSensor(sensorName);
+		Vector3 pointRelativeToTread = sensor.GetRelativeToTreadContactPoint(frame, mirrored);
+		//if(sensorName == "LeftAnkle") Debug.Log("Relative Point = " + pointRelativeToTread);
+		string treadName = sensor.GetContactColliderName(frame, mirrored);
+		Matrix4x4 treadWorldMatrix = GameObject.Find(treadName).transform.GetWorldMatrix();
+		Vector3 correctedPoint = pointRelativeToTread.GetRelativePositionFrom(treadWorldMatrix);
+		correctedPoint.y = sensor.GetCorrectedTransformation(frame, mirrored).GetPosition().y;
+		return correctedPoint;
+	}
+
+	public Vector3 GetCorrectionVectorWithRelativeContacts(Frame frame, Vector3 point, string sensorName, bool mirrored){
+		Vector3 correctedPoint = GetCorrectedPointWithRelativeContacts(frame, sensorName, mirrored);
+		return correctedPoint - point;
+	}
+
+	public Vector3 GetRelativeToTreadContactPoint(Frame frame, string sensorName, bool mirrored){
+		Sensor sensor = GetSensor(sensorName);
+		return mirrored ? sensor.InverseRelativeContactPoints[frame.Index-1] : sensor.RegularRelativeContactPoints[frame.Index-1];
+	}
+
+	public Vector3 GetRelativeToTreadFutureContactPoint(Frame frame, string sensorName, bool mirrored){
+		Sensor sensor = GetSensor(sensorName);
+		return mirrored ? sensor.InverseRelativeFutureGoalPoints[frame.Index-1] : sensor.RegularRelativeFutureGoalPoints[frame.Index-1];
+	}
+
+	public string GetContactColliderName(Frame frame, string sensorName, bool mirrored){
+		Sensor sensor = GetSensor(sensorName);
+		return mirrored ? sensor.InverseContactColliderNames[frame.Index-1] : sensor.RegularContactColliderNames[frame.Index-1];
+	}
+
+	public string GetFutureContactColliderName(Frame frame, string sensorName, bool mirrored){
+		Sensor sensor = GetSensor(sensorName);
+		return mirrored ? sensor.InverseFutureGoalColliderNames[frame.Index-1] : sensor.RegularFutureGoalColliderNames[frame.Index-1];
+	}
+
 	public Vector3 GetCorrectedPointWithStepNoise(Transform root, Vector3 point, bool mirrored){
 		//Sensor sensor = GetSensor(SensorName);
 		RaycastHit contactRay;
@@ -885,6 +974,11 @@ public class ContactModule : Module {
 						Frame reference = Data.GetFrame(j);
 						//Vector3 HorizontalOffset = Sensors[i].GetHorizontalStepOffsetVector(reference, editor.Mirror);
 						Vector3 FutureGoalPoint = Sensors[i].GetFutureGoalPoint(reference, editor.Mirror);
+						FutureGoalPoint = Sensors[i].GetRelativeToTreadFutureContactPoint(reference, editor.Mirror);
+						string treadName = Sensors[i].GetFutureContactColliderName(frame, editor.Mirror);
+						//if(Sensors[i].GetName() == "LeftAnkle") Debug.Log("Tread name = " + treadName);
+						Matrix4x4 treadWorldMatrix = GameObject.Find(treadName).transform.GetWorldMatrix();
+						FutureGoalPoint = FutureGoalPoint.GetRelativePositionFrom(treadWorldMatrix);
 						//Vector3 CorrectionOffset = Sensors[i].GetCorrectedContactPoint(reference, editor.Mirror) - Sensors[i].GetContactPoint(reference, editor.Mirror);
 						//FutureGoalPoint = GetCorrectedStraightStairWalkingStep(reference, editor.GetActor().GetRoot(), FutureGoalPoint, Sensors[i].GetName(), editor.Mirror);
 						FutureGoalPoint = GetProjectedPoint(FutureGoalPoint);
@@ -1034,6 +1128,7 @@ public class ContactModule : Module {
 		CorrectedMotionTrajectory = EditorGUILayout.Toggle("Corrected Motion Trajectory", CorrectedMotionTrajectory);
 		ShowFutureGoalPoints = EditorGUILayout.Toggle("Show Future Goal Points", ShowFutureGoalPoints);
 		useSteps = EditorGUILayout.Toggle("Use Steps Data", useSteps);
+		IKTest = EditorGUILayout.Toggle("IK test", IKTest);
 		PastTrajectoryWindow = EditorGUILayout.FloatField("Past Trajectory Window", PastTrajectoryWindow);
 		FutureTrajectoryWindow = EditorGUILayout.FloatField("Future Trajectory Window" , FutureTrajectoryWindow);
 		//ShowSkeletons = EditorGUILayout.Toggle("Show Skeletons", ShowSkeletons);
@@ -1056,6 +1151,97 @@ public class ContactModule : Module {
 		if(Utility.GUIButton("+", UltiDraw.DarkGrey, UltiDraw.White)) {
 			AddSensor();
 		}
+		if(Utility.GUIButton("Add Root Sensor", UltiDraw.DarkGrey, UltiDraw.White)) {
+			AddRootSensor();
+		}
+	}
+
+	
+	[System.Serializable]
+	public class RootSensor{
+
+		public ContactModule Module = null;
+
+		public string FirstTread, LastTread = " ";
+		public string[] RegularContactTreads, InverseContactTreads = new string[0];
+		public Vector3[] RegularLocalXContacts, InverseLocalXContacts = new Vector3[0];
+
+		public RootSensor(ContactModule module){
+			Module = module;
+			if(module != null){
+				FirstTread = " ";
+				LastTread = " ";
+				RegularContactTreads = new string[Module.Data.Frames.Length];
+				InverseContactTreads = new string[Module.Data.Frames.Length];
+				RegularLocalXContacts = new Vector3[Module.Data.Frames.Length];
+				InverseLocalXContacts = new Vector3[Module.Data.Frames.Length];
+			}
+		}
+
+		public string GetRootContactTreadName(Frame frame, bool mirrored){
+			return mirrored ? InverseContactTreads[frame.Index-1] : RegularContactTreads[frame.Index-1];
+		}
+
+		public Vector3 GetRootLocalXContact(Frame frame, bool mirrored){
+			return mirrored ? InverseLocalXContacts[frame.Index-1] : RegularLocalXContacts[frame.Index-1];
+		}
+
+		public string GetFirstTreadName(){
+			return FirstTread;
+		}
+
+		public string GetLastTreadName(){
+			return LastTread;
+		}
+
+		public void CaptureFirstTread(Frame frame, MotionEditor editor){
+			Vector3 rootPos = editor.GetActor().GetRoot().position; 
+			RaycastHit surfaceHit;
+			rootPos.y += 1f;
+			Physics.Raycast(rootPos, Vector3.down, out surfaceHit, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+			if(FirstTread == " " && surfaceHit.collider.name != "Ground") FirstTread = surfaceHit.collider.name;
+		}
+
+		public void CaptureLastTread(Frame frame, MotionEditor editor){
+			Vector3 rootPos = editor.GetActor().GetRoot().position; 
+			RaycastHit surfaceHit;
+			rootPos.y += 1f;
+			Physics.Raycast(rootPos, Vector3.down, out surfaceHit, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+			if(surfaceHit.collider.name != "Ground") LastTread = surfaceHit.collider.name;
+		}
+
+		public void CaptureTreadName(Frame frame, MotionEditor editor){
+			//Vector3 origin = editor.GetActor().GetBoneTransformation(GetName()).GetPosition();
+			Vector3 rootPos = editor.GetActor().GetRoot().position; 
+			RaycastHit surfaceHit;
+			rootPos.y += 1f;
+			Physics.Raycast(rootPos, Vector3.down, out surfaceHit, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+			if(surfaceHit.collider == null){
+				if(editor.Mirror) InverseContactTreads[frame.Index-1] = "NoContact";
+				else RegularContactTreads[frame.Index-1] = "NoContact";
+			}else{
+				if(editor.Mirror) InverseContactTreads[frame.Index-1] = surfaceHit.collider.name;
+				else RegularContactTreads[frame.Index-1] = surfaceHit.collider.name;
+			}
+		}
+
+		public void CaptureLocalXContact(Frame frame, MotionEditor editor){
+			//Vector3 origin = editor.GetActor().GetBoneTransformation(GetName()).GetPosition();
+			Vector3 rootPos = editor.GetActor().GetRoot().position; 
+			RaycastHit surfaceHit;
+			rootPos.y += 1f;
+			Physics.Raycast(rootPos, Vector3.down, out surfaceHit, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+			if(surfaceHit.collider == null){
+				if(editor.Mirror) InverseLocalXContacts[frame.Index-1] = Vector3.zero;
+				else RegularLocalXContacts[frame.Index-1] = Vector3.zero;
+			}else{
+				Matrix4x4 targetMatrix = surfaceHit.transform.GetWorldMatrix();
+        		Vector3 transformedPoint = targetMatrix.inverse.MultiplyPoint(surfaceHit.point);
+				if(editor.Mirror) InverseLocalXContacts[frame.Index-1] = transformedPoint;
+				else RegularLocalXContacts[frame.Index-1] = transformedPoint;
+			}
+		}
+
 	}
 
 	[System.Serializable]
@@ -1093,6 +1279,9 @@ public class ContactModule : Module {
 		public string[] RegularContactColliderNames, InverseContactColliderNames = new string[0];
 		public string[] RegularFutureGoalColliderNames, InverseFutureGoalColliderNames = new string[0];
 
+		public Vector3[] RegularRelativeContactPoints, InverseRelativeContactPoints = new Vector3[0];
+		public Vector3[] RegularRelativeFutureGoalPoints, InverseRelativeFutureGoalPoints = new Vector3[0];
+
 		public Sensor(ContactModule module, int bone, Vector3 offset, float threshold, float tolerance, float velocity, ID capture, ID edit) {
 			Module = module;
 			Bone = bone;
@@ -1118,6 +1307,12 @@ public class ContactModule : Module {
 			InverseContactColliderNames = new string[Module.Data.Frames.Length];
 			RegularFutureGoalColliderNames = new string[Module.Data.Frames.Length];
 			InverseFutureGoalColliderNames = new string[Module.Data.Frames.Length];
+
+			//Relative Data
+			RegularRelativeContactPoints = new Vector3[Module.Data.Frames.Length];
+			InverseRelativeContactPoints = new Vector3[Module.Data.Frames.Length];
+			RegularRelativeFutureGoalPoints = new Vector3[Module.Data.Frames.Length];
+			InverseRelativeFutureGoalPoints = new Vector3[Module.Data.Frames.Length];
 		}
 
 		public string GetName() {
@@ -1163,6 +1358,14 @@ public class ContactModule : Module {
 
 		public string GetFutureContactColliderName(Frame frame, bool mirrored){
 			return mirrored ? InverseFutureGoalColliderNames[frame.Index-1] : RegularFutureGoalColliderNames[frame.Index-1];
+		}
+
+		public Vector3 GetRelativeToTreadContactPoint(Frame frame, bool mirrored){
+			return mirrored ? InverseRelativeContactPoints[frame.Index-1] : RegularRelativeContactPoints[frame.Index-1];
+		}
+
+		public Vector3 GetRelativeToTreadFutureContactPoint(Frame frame, bool mirrored){
+			return mirrored ? InverseRelativeFutureGoalPoints[frame.Index-1] : RegularRelativeFutureGoalPoints[frame.Index-1];
 		}
 
 		public Vector3 GetCorrectedPointWithStepNoise(Transform root, Vector3 point, bool mirrored){
@@ -1735,6 +1938,68 @@ public class ContactModule : Module {
 			}
 		}
 
+		public void CaptureRelativeToTreadContactPoints(Frame frame, MotionEditor editor, Vector3 pivot){
+			//Vector3 origin = editor.GetActor().GetBoneTransformation(GetName()).GetPosition();
+			RaycastHit surfaceHit;
+			pivot.y += 1f;
+			Physics.Raycast(pivot, Vector3.down, out surfaceHit, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+			if(pivot ==  null || surfaceHit.collider == null){
+				if(editor.Mirror) InverseRelativeContactPoints[frame.Index-1] = Vector3.zero;
+				else RegularRelativeContactPoints[frame.Index-1] = Vector3.zero;
+			}else{
+				Matrix4x4 surfaceWorldMatrix = surfaceHit.transform.GetWorldMatrix();
+				if(editor.Mirror) InverseRelativeContactPoints[frame.Index-1] = surfaceHit.point.GetRelativePositionTo(surfaceWorldMatrix);
+				else RegularRelativeContactPoints[frame.Index-1] = surfaceHit.point.GetRelativePositionTo(surfaceWorldMatrix);
+			}
+		}
+
+		public void CaptureRelativeToTreadFutureGoalPoints(Frame frame, MotionEditor editor, Vector3 pivot){
+			//Vector3 origin = editor.GetActor().GetBoneTransformation(GetName()).GetPosition();
+			RaycastHit surfaceHit;
+			pivot.y += 1f;
+			Physics.Raycast(pivot, Vector3.down, out surfaceHit, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+			if(pivot ==  null || surfaceHit.collider == null){
+				if(editor.Mirror) InverseRelativeFutureGoalPoints[frame.Index-1] = Vector3.zero;
+				else RegularRelativeFutureGoalPoints[frame.Index-1] = Vector3.zero;
+			}else{
+				Matrix4x4 surfaceWorldMatrix = surfaceHit.transform.GetWorldMatrix();
+				if(editor.Mirror) InverseRelativeFutureGoalPoints[frame.Index-1] = surfaceHit.point.GetRelativePositionTo(surfaceWorldMatrix);
+				else RegularRelativeFutureGoalPoints[frame.Index-1] = surfaceHit.point.GetRelativePositionTo(surfaceWorldMatrix);
+			}
+		}
+
+		/*public void CaptureTreadName(Frame frame, MotionEditor editor){
+			//Vector3 origin = editor.GetActor().GetBoneTransformation(GetName()).GetPosition();
+			Vector3 rootPos = editor.GetActor().GetRoot().position; 
+			RaycastHit surfaceHit;
+			rootPos.y += 1f;
+			Physics.Raycast(rootPos, Vector3.down, out surfaceHit, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+			if(surfaceHit.collider == null){
+				if(editor.Mirror) RootInverseContactTreads[frame.Index-1] = "NoContact";
+				else RootRegularContactTreads[frame.Index-1] = "NoContact";
+			}else{
+				if(editor.Mirror) RootInverseContactTreads[frame.Index-1] = surfaceHit.collider.name;
+				else RootRegularContactTreads[frame.Index-1] = surfaceHit.collider.name;
+			}
+		}*/
+
+		/*public void CaptureLocalXContact(Frame frame, MotionEditor editor){
+			//Vector3 origin = editor.GetActor().GetBoneTransformation(GetName()).GetPosition();
+			Vector3 rootPos = editor.GetActor().GetRoot().position; 
+			RaycastHit surfaceHit;
+			rootPos.y += 1f;
+			Physics.Raycast(rootPos, Vector3.down, out surfaceHit, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+			if(surfaceHit.collider == null){
+				if(editor.Mirror) RootInverseLocalXContacts[frame.Index-1] = 0f;
+				else RootRegularLocalXContacts[frame.Index-1] = 0f;
+			}else{
+				Matrix4x4 targetMatrix = surfaceHit.transform.GetWorldMatrix();
+        		Vector3 transformedPoint = targetMatrix.inverse.MultiplyPoint(surfaceHit.point);
+				if(editor.Mirror) RootInverseLocalXContacts[frame.Index-1] = transformedPoint.x;
+				else RootRegularLocalXContacts[frame.Index-1] = transformedPoint.x;
+			}
+		}*/
+
 		public void CaptureDirections(Frame f, MotionEditor editor){
 			//Using bone directions as contact point directions
 			{
@@ -1805,7 +2070,8 @@ public class ContactModule : Module {
 				if(RegularContacts[frame.Index+j] != 0f){
 					RegularFutureGoalPoints[frame.Index-1] = RegularContactPoints[frame.Index+j];
 					RegularFutureGoalDirections[frame.Index-1] = RegularDirections[frame.Index+j];
-					//RegularFutureGoalColliderNames[frame.Index-1] = RegularContactColliderNames[frame.Index+j];
+					RegularFutureGoalColliderNames[frame.Index-1] = RegularContactColliderNames[frame.Index+j];
+					RegularRelativeFutureGoalPoints[frame.Index-1] = RegularRelativeFutureGoalPoints[frame.Index+j];
 					break;
 				}
 				/*if(j==start+1){
@@ -1818,7 +2084,8 @@ public class ContactModule : Module {
 				if(InverseContacts[frame.Index+j] != 0f){
 					InverseFutureGoalPoints[frame.Index-1] = InverseContactPoints[frame.Index+j];
 					InverseFutureGoalDirections[frame.Index-1] = InverseDirections[frame.Index+j];
-					//InverseFutureGoalColliderNames[frame.Index-1] = InverseContactColliderNames[frame.Index+j];
+					InverseFutureGoalColliderNames[frame.Index-1] = InverseContactColliderNames[frame.Index+j];
+					InverseRelativeFutureGoalPoints[frame.Index-1] = InverseRelativeFutureGoalPoints[frame.Index+j];
 					break;
 				}
 				/*if(j==start+1){
@@ -1835,12 +2102,14 @@ public class ContactModule : Module {
 					RegularFutureGoalDirections[i] = RegularFutureGoalDirections[i+1];
 					//RegularContactColliderNames[i] = RegularContactColliderNames[i+1];
 					RegularFutureGoalColliderNames[i] = RegularFutureGoalColliderNames[i+1];
+					RegularRelativeFutureGoalPoints[i] = RegularRelativeFutureGoalPoints[i+1];
 				}
 				if(InverseFutureGoalPoints[i] == Vector3.zero && i != framesLength-1){
 					InverseFutureGoalPoints[i] = InverseFutureGoalPoints[i+1];
 					InverseFutureGoalDirections[i] = InverseFutureGoalDirections[i+1];
 					//InverseContactColliderNames[i] = InverseContactColliderNames[i+1];
 					InverseFutureGoalColliderNames[i] = InverseFutureGoalColliderNames[i+1];
+					InverseRelativeFutureGoalPoints[i] = InverseRelativeFutureGoalPoints[i+1];
 				}
 			}
 		}
