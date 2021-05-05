@@ -9,6 +9,7 @@ public class CuboidMapModule : Module {
 
 	public Vector3 Size = Vector3.one;
 	public Vector3Int Resolution = new Vector3Int(10, 10, 10);
+	public float HeightOffset = 0f;
 	public LayerMask Mask = -1;
 	public Color Color = UltiDraw.Cyan;
 	public bool DrawReferences = false;
@@ -32,22 +33,31 @@ public class CuboidMapModule : Module {
 		
 	}
 
-	public CuboidMap GetCuboidMap(Frame frame, bool mirrored) {
+	public CuboidMap GetCuboidMap(MotionEditor editor, Frame frame, bool mirrored) {
 		CuboidMap sensor = new CuboidMap(Resolution);
 		RootModule module = (RootModule)Data.GetModule(ID.Root);
 		if(module != null) {
 			Vector3 position = module.GetRootPosition(frame, mirrored);
 			Quaternion rotation = module.GetRootRotation(frame, mirrored);
-			sensor.Sense(Matrix4x4.TRS(position + new Vector3(0f, 0.5f*Size.y, 0f), rotation, Vector3.one), Mask, Size);
+			if(HeightOffset == 0f){
+				sensor.Sense(Matrix4x4.TRS(position + new Vector3(0f, 0.5f*Size.y, 0f), rotation, Vector3.one), Mask, Size);
+			}else{
+				sensor.Sense(editor.GetActor(), Matrix4x4.TRS(position + new Vector3(0f, 0.5f*Size.y, 0f), rotation, Vector3.one), Mask, Size, HeightOffset);
+			}
 		} else {
-			sensor.Sense(frame.GetBoneTransformation(0, mirrored), Mask, Size);
+			if(HeightOffset == 0f){
+				sensor.Sense(frame.GetBoneTransformation(0, mirrored), Mask, Size);
+			}else{
+				sensor.Sense(editor.GetActor(), frame.GetBoneTransformation(0, mirrored), Mask, Size, HeightOffset);
+			}
 		}
 		return sensor;
 	}
 
 	protected override void DerivedDraw(MotionEditor editor) {
-		CuboidMap sensor = GetCuboidMap(editor.GetCurrentFrame(), editor.Mirror);
-		sensor.Draw(Color);
+		CuboidMap sensor = GetCuboidMap(editor, editor.GetCurrentFrame(), editor.Mirror);
+		//sensor.Draw(Color);
+		sensor.Draw(editor.GetActor(), Color, HeightOffset);
 		if(DrawReferences) {
 			sensor.DrawReferences();
 		}
@@ -59,6 +69,7 @@ public class CuboidMapModule : Module {
 	protected override void DerivedInspector(MotionEditor editor) {
 		Size = EditorGUILayout.Vector3Field("Size", Size);
 		Resolution = EditorGUILayout.Vector3IntField("Resolution", Resolution);
+		HeightOffset = EditorGUILayout.FloatField("Height Offset", HeightOffset);
 		Mask = InternalEditorUtility.ConcatenatedLayersMaskToLayerMask(EditorGUILayout.MaskField("Mask", InternalEditorUtility.LayerMaskToConcatenatedLayersMask(Mask), InternalEditorUtility.layers));
 		Color = EditorGUILayout.ColorField("Color", Color);
 		DrawReferences = EditorGUILayout.Toggle("Draw References", DrawReferences);
