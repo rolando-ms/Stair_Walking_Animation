@@ -27,6 +27,7 @@ public class NoiseStepsEvenDifferent : SceneEvent {
     private Vector3 NewPosition = Vector3.zero;
 
 	private float randomNumber = 0f;
+	private float randomXRange = 0f;
 
 	private bool stop = false;
 
@@ -76,6 +77,8 @@ public class NoiseStepsEvenDifferent : SceneEvent {
 			Physics.Raycast(rootOffseted, Vector3.down, out hitRay, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
 
 			randomNumber = Random.value;
+			randomXRange = Random.Range(MinScaleNoise.x - 1f, MaxScaleNoise.x - 1f);
+			//Debug.Log("random X Range = " + randomXRange);
 			if(hitRay.collider.name != rootSensor.GetLastTreadName() && hitRay.transform.localScale.x < 2.5f){
 				for(int i = 0; i < transform.childCount; i++){
 					Transform childTransform = GetChildTransform(transform.GetChild(i));
@@ -187,9 +190,12 @@ public class NoiseStepsEvenDifferent : SceneEvent {
 		
 		// Width noise
 		Vector3 scaleVector = stepData.DefaultScale;
-		float XNoise = (MaxScaleNoise.x - 1f) * randomNumber;
-		//XNoise = 1f;
+		//float XNoise = (MaxScaleNoise.x - 1f) * randomNumber;
+		float XNoise = randomXRange;
+		//XNoise = -0.2f;
 		float direction = 1f;
+		float mirror = 1f;
+		if(editor.Mirror) mirror = -1f;
 		//Debug.DrawRay(editor.GetActor().GetRoot().position, editor.GetActor().GetRoot().forward, Color.yellow, 1f);
 		float rootTreadDotProduct = Vector3.Dot(editor.GetActor().GetRoot().forward, stepData.transform.right);
 		//Debug.Log("dot Product = " + rootTreadDotProduct);
@@ -239,24 +245,14 @@ public class NoiseStepsEvenDifferent : SceneEvent {
 		// Update
 		switch(NoiseType){
 			case 3:
-				newPos.y = stepData.DefaultPosition.y - difference * randomNumber * HeightHomogeneousNoise;
-				if(XNoise > 0f){
-					//if(stepData.DefaultScale.x < 3f)
-					//	cummulativeDistanceOffset += (((1f + XNoise) * stepData.DefaultScale.x - stepData.DefaultScale.x) / 2f);
-						
-					newPos.x = stepData.DefaultPosition.x - (direction * cummulativeDistanceOffset);
-				}
+				newPos.y = stepData.DefaultPosition.y - difference * randomNumber * HeightHomogeneousNoise;	
+				newPos.x = stepData.DefaultPosition.x - (mirror * direction * cummulativeDistanceOffset);
 				if(stepData.DefaultScale.x < 3f)
 				childTransform.localScale = new Vector3(scaleVector.x, stepData.DefaultScale.y, stepData.DefaultScale.z);
 				
 				break;
 			case 2:
-				//if(XNoise > 0f){
-				//if(stepData.DefaultScale.x < 3f)
-				//	cummulativeDistanceOffset += (((1f + XNoise) * stepData.DefaultScale.x - stepData.DefaultScale.x) / 2f);
-					
-				newPos.x = stepData.DefaultPosition.x - (direction * cummulativeDistanceOffset);
-				//}
+				newPos.x = stepData.DefaultPosition.x - (mirror * direction * cummulativeDistanceOffset);
 				if(stepData.DefaultScale.x < 3f) 
 				childTransform.localScale = new Vector3(scaleVector.x, stepData.DefaultScale.y, stepData.DefaultScale.z);
 				
