@@ -132,7 +132,8 @@ public class TimeSeries {
 	public class Root : Series {
 		public Matrix4x4[] Transformations;
 		public Vector3[] Velocities;
-		// public float[] Speeds;
+		public string[] ContactTreads;
+		public float[] LocalXContacts;
 
 		public override ID GetID() {
 			return Series.ID.Root;
@@ -142,11 +143,13 @@ public class TimeSeries {
 			timeSeries.Add(this);
 			Transformations = new Matrix4x4[TimeSeries.Samples.Length];
 			Velocities = new Vector3[TimeSeries.Samples.Length];
-			// Speeds = new float[TimeSeries.Samples.Length];
+			ContactTreads = new string[TimeSeries.Samples.Length];
+			LocalXContacts = new float[TimeSeries.Samples.Length];
 			for(int i=0; i<Transformations.Length; i++) {
 				Transformations[i] = Matrix4x4.identity;
 				Velocities[i] = Vector3.zero;
-				// Speeds[i] = 0f;
+				ContactTreads[i] = " ";
+				LocalXContacts[i] = 0f;
 			}
 		}
 
@@ -188,6 +191,22 @@ public class TimeSeries {
 
 		public Vector3 GetVelocity(int index) {
 			return Velocities[index];
+		}
+
+		public void SetContactTread(int index, string contactTread){
+			ContactTreads[index] = contactTread;
+		}
+
+		public string GetContactTread(int index){
+			return ContactTreads[index];
+		}
+
+		public void SetLocalXContact(int index, float localXContact){
+			LocalXContacts[index] = localXContact;
+		}
+
+		public float GetLocalXContact(int index){
+			return LocalXContacts[index];
 		}
 
 		public float ComputeSpeed() {
@@ -520,6 +539,9 @@ public class TimeSeries {
 			}
 
 			int currentFrameIndex = TimeSeries.GetPivot().Index;
+			float frameTimestamp = Editor.GetCurrentFrame().Timestamp;
+			int currentFrameGlobalIndex = Editor.GetCurrentFrame().Index;
+			float stepIncrement = Mathf.Max(CModule.Step, 1)/Editor.GetData().Framerate;
 			for(int i=0; i<LeftFootTransformations.Length; i+=step) {
 				Vector3 LeftPosition = Vector3.zero;
 				if(leftContacts[i] > 0f || rightContacts[i] > 0f){
@@ -536,11 +558,23 @@ public class TimeSeries {
 					//LeftPosition += CModule.GetFrameYCorrectionVector(Editor, LeftFootTransformations[currentFrameIndex].GetPosition(), Editor.Mirror, "LeftAnkle");
 					LeftPosition = GetLeftFootPosition(i);
 					LeftPosition += CModule.GetFrameYCorrectionVector(Editor, GetLeftFootPosition(currentFrameIndex), Editor.Mirror, "LeftAnkle");
+					/*RaycastHit hitRay;
+					Vector3 LeftPositionOffsettedUp = LeftPosition;
+					LeftPositionOffsettedUp.y += 0.05f;
+					Physics.Raycast(LeftPositionOffsettedUp, Vector3.up, out hitRay, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+					if(hitRay.collider.transform.localScale.x < 4f){
+						Debug.DrawRay(LeftPosition, Editor.GetActor().GetRoot().forward.normalized, Color.cyan, 1f);
+					}
+					*/
 				}else{
 					LeftPosition = LeftFootTransformations[i].GetPosition();
 					//LeftPosition = LeftFootTransformations[i].GetPosition() + 
 					//			   CModule.GetFrameCorrectionVector(Editor.GetCurrentFrame(), LeftFootTransformations[i].GetPosition(), Editor.Mirror, "LeftAnkle");
 				}
+				Frame relativeFrame = Editor.GetData().GetFrame(frameTimestamp + (i - currentFrameIndex) * stepIncrement);
+				Vector3 correctedPoint = CModule.GetCorrectedPointWithRelativeContacts(relativeFrame, "LeftAnkle", Editor.Mirror);
+				LeftPosition = correctedPoint;
+				if(LeftPosition.x == 0f && LeftPosition.z == 0f) LeftPosition = LeftFootTransformations[i].GetPosition();
 				//Vector3 newLeftPosition = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), LeftFootTransformations[i].GetPosition(),Editor.Mirror);
 				//UltiDraw.DrawSphere(LeftFootTransformations[i].GetPosition(), Quaternion.identity, 0.025f, UltiDraw.Red);
 				UltiDraw.DrawSphere(LeftPosition, Quaternion.identity, 0.025f, UltiDraw.Red);
@@ -565,11 +599,23 @@ public class TimeSeries {
 					//RightPosition += CModule.GetFrameYCorrectionVector(Editor, RightFootTransformations[currentFrameIndex].GetPosition(), Editor.Mirror, "RightAnkle");
 					RightPosition = GetRightFootPosition(i);
 					RightPosition += CModule.GetFrameYCorrectionVector(Editor, GetRightFootPosition(currentFrameIndex), Editor.Mirror, "RightAnkle");
+					/*RaycastHit hitRay;
+					Vector3 RightPositionOffsettedUp = RightPosition;
+					RightPositionOffsettedUp.y += 0.05f;
+					Physics.Raycast(RightPositionOffsettedUp, Vector3.up, out hitRay, float.PositiveInfinity, LayerMask.GetMask("Ground", "Interaction"));
+					if(hitRay.collider.transform.localScale.x < 4f){
+						Debug.DrawRay(RightPosition, Editor.GetActor().GetRoot().forward.normalized, Color.yellow, 1f);
+					}
+					*/
 				}else{
 					RightPosition = RightFootTransformations[i].GetPosition();
 					//RightPosition = RightFootTransformations[i].GetPosition() + 
 					//				CModule.GetFrameCorrectionVector(Editor.GetCurrentFrame(), RightFootTransformations[i].GetPosition(), Editor.Mirror, "RightAnkle");
 				}
+				Frame relativeFrame = Editor.GetData().GetFrame(frameTimestamp + (i - currentFrameIndex) * stepIncrement);
+				Vector3 correctedPoint = CModule.GetCorrectedPointWithRelativeContacts(relativeFrame, "RightAnkle", Editor.Mirror);
+				RightPosition = correctedPoint;
+				if(RightPosition.x == 0f && RightPosition.z == 0f) RightPosition = RightFootTransformations[i].GetPosition();
 				//Vector3 newRightPosition = CModule.GetCorrectedPointWithStepNoise(Editor.GetActor().GetRoot(), RightFootTransformations[i].GetPosition(),Editor.Mirror);
 				//UltiDraw.DrawSphere(RightFootTransformations[i].GetPosition(), Quaternion.identity, 0.025f, UltiDraw.Yellow);
 				UltiDraw.DrawSphere(RightPosition, Quaternion.identity, 0.025f, UltiDraw.Yellow);
