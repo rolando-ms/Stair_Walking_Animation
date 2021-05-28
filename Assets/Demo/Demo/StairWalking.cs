@@ -36,6 +36,8 @@ public class StairWalking : NeuralAnimation {
 	public bool CorrectFootPlacement = false;
 	public bool CorrectFootTrajectory = false;
 	public bool CorrectAnklePosition = false;
+	[Range(0,5)] public float CharacterVelocity;
+	[Range(0,5)] public float AnkleCorrectionWeight;
 
 	private Controller Controller;
 	private TimeSeries TimeSeries;
@@ -441,27 +443,46 @@ public class StairWalking : NeuralAnimation {
 		RootPos.y += 1f;
 		//Debug.DrawRay(RootPos, -Vector3.up, Color.green);
 		Physics.Raycast(RootPos, Vector3.down, out RootPosHit, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
-		float treadXScale = 100 * RootPosHit.transform.localScale.x;
+		float treadXScale = 100 * RootPosHit.transform.localScale.x; // Use this when using stairs exported from blender
+		treadXScale = RootPosHit.transform.localScale.z; // Use this for stairs created in unity (Z scale)
+		//Debug.Log("Tread scale = " + treadXScale);
 		//Debug.Log("Dot product = " + directionWRTZFwd);
 		if(RootPosHit.transform.tag == "Tread"){
 			Vector3 HitForward = GetParentForwardVector(RootPosHit.transform);
-			//Debug.DrawRay(Actor.GetRoot().position, HitForward, Color.cyan, 1f);
+			Debug.DrawRay(Actor.GetRoot().position, HitForward, Color.cyan, 1f);
 			float directionWRTTreadZFwd = Vector3.Dot(root.GetForward(), HitForward);
 			//Debug.Log("direction value = " + directionWRTTreadZFwd);
-			float VelocityOnStairs = 6.66f * treadXScale - 1.53f;
+			//float VelocityOnStairs = 6.66f * treadXScale - 1.53f;
+			//float VelocityOnStairs = 3.75f * treadXScale - 0.5125f; // Linear
+			//float VelocityOnStairs = 19.45f * Mathf.Pow(treadXScale, 2.96f); // Power Curve
+			//float VelocityOnStairs = 4.50f - 7.73f * Mathf.Exp(-2.71f*treadXScale); // Basic Exponential
+			//float VelocityOnStairs = 0.83f - 5.49f * treadXScale + 14.85f * treadXScale * treadXScale; // (4 epochs) 2nd order polynomial
+			float VelocityOnStairs = 1.57f - 22.56f * treadXScale + 70.87f * treadXScale * treadXScale; // (150 epochs)
+			//Debug.Log("Velocity on stairs = " + VelocityOnStairs);
 			//If going upstairs, reduce character's velocity
 			if(directionWRTTreadZFwd > 0f){
+				directionWRTTreadZFwd *= 2.5f;
 				VelocityOnStairs -= (VelocityOnStairs * 0.25f * directionWRTTreadZFwd);
 			}
-			if(VelocityOnStairs > walkVelocity){
-				VelocityOnStairs = walkVelocity;
-			}
+			//VelocityOnStairs = CharacterVelocity;
+			//if(VelocityOnStairs > walkVelocity){
+				//VelocityOnStairs = walkVelocity;
+			//}
 			//VelocityOnStairs = 0.8f;
 			Controller.GetSignal("Walk").Velocity = VelocityOnStairs; //(treadXScale / maxTreadDepth) * walkVelocity;
 		}else{
 			Controller.GetSignal("Walk").Velocity = walkVelocity;
 		}
-		
+
+		float AnkleToFootCenterDistance = 0.05f;
+		float AnkleHeight = 0.08f;
+		float OffAnkleDistance = 0f;
+		float OffRootDistance = 0f;
+		float AnkleDistanceThreshold = 0.5f;
+		float RootDistanceThreshold = 0.2f; //0.2
+		Vector3 DesiredLeftAnklePos = Actor.GetBoneTransformation("LeftAnkle").GetPosition();
+		Vector3 DesiredRightAnklePos = Actor.GetBoneTransformation("RightAnkle").GetPosition();
+
 		if(UseSteps){
 
 			//DrawPlane(Actor.GetRoot().position + Actor.GetRoot().forward.normalized * treadXScale, -1 * Actor.GetRoot().forward, Color.blue);
@@ -614,12 +635,23 @@ public class StairWalking : NeuralAnimation {
 
 				// Continue Step cycle. Sum 2 times the tread depth
 				if((LeftGoalClipped || RightGoalClipped) && StepsCycle){
-					if(Vector3.Distance(leftFootPos, FutureLeftGoalStored) < 0.2f){
+					// Goal Reached if inside a threshold
+					if(Vector3.Distance(leftFootPos, FutureLeftGoalStored) < 0.25f){
 						LeftGoalReached = true;
 					}
-					if(Vector3.Distance(rightFootPos, FutureRightGoalStored) < 0.2f){
+					if(Vector3.Distance(rightFootPos, FutureRightGoalStored) < 0.25f){
 						RightGoalReached = true;
 					}
+					
+					// Goal Reached if it lies behind character
+					Plane rootPlane = new Plane(Actor.GetRoot().forward, Actor.GetRoot().position);
+					//DrawPlane(Actor.GetRoot().position, Actor.GetRoot().forward, Color.red);
+					float leftDistance = rootPlane.GetDistanceToPoint(FutureLeftGoalStored);
+					if(leftDistance < 0f) LeftGoalReached = true;
+					float rightDistance = rootPlane.GetDistanceToPoint(FutureRightGoalStored);
+					if(rightDistance < 0f) RightGoalReached = true;
+					
+					// Shoot new future goal if old is reached
 					if(LeftGoalReached){
 						LeftGoalReached = false;
 						FutureLeftGoalStored = Actor.GetRoot().position + 2 * treadXScale * Actor.GetRoot().forward + stepWidthOffset * Actor.GetRoot().right; //FutureLeftGoalStored + 2 * treadXScale * Actor.GetRoot().forward;
@@ -666,32 +698,34 @@ public class StairWalking : NeuralAnimation {
 			// If character direction changes, restart step cycle
 			if((Vector3.Dot(Actor.GetBoneTransformation("LeftAnkle").GetForward().normalized, LeftGoalDirection) < 0.1f) ||
 			(Vector3.Dot(Actor.GetBoneTransformation("RightAnkle").GetForward().normalized, RightGoalDirection) < 0.1f) ||
-			(Vector3.Distance(Actor.GetBoneTransformation("LeftAnkle").GetPosition(), LeftGoalPosition) > 1f) ||
-			(Vector3.Distance(Actor.GetBoneTransformation("RightAnkle").GetPosition(), RightGoalPosition) > 1f) ){
+			(Vector3.Distance(Actor.GetBoneTransformation("LeftAnkle").GetPosition(), LeftGoalPosition) > 1.5f) ||
+			(Vector3.Distance(Actor.GetBoneTransformation("RightAnkle").GetPosition(), RightGoalPosition) > 1.5f) ){
 				resetCycle();
 			}
 
+			if(RootPosHit.transform.tag != "Tread") resetCycle();
 
 			if(CorrectFootTrajectory){
 				//Correcting Feet Trajectories according to foot step goal
 				if(RootPosHit.transform.tag == "Tread"){
-					float AnkleToFootCenterDistance = 0.05f;
-					float AnkleHeight = 0.08f;
-					float OffAnkleDistance = 0f;
-					float OffRootDistance = 0f;
-					float AnkleDistanceThreshold = 0.4f;
-					float RootDistanceThreshold = 0.2f;
+					//float AnkleToFootCenterDistance = 0.05f;
+					//float AnkleHeight = 0.08f;
+					//float OffAnkleDistance = 0f;
+					//float OffRootDistance = 0f;
+					//float AnkleDistanceThreshold = 0.5f;
+					//float RootDistanceThreshold = 0.2f; //0.2
 					int MinLeftDistancePointIndex = 0;
 					float MinLeftDistance = float.PositiveInfinity;
-					Vector3 DesiredLeftAnklePos = LeftGoalPosition + (-1f) * Actor.GetRoot().forward.normalized * AnkleToFootCenterDistance;
+					DesiredLeftAnklePos = LeftGoalPosition + (-1f) * Actor.GetRoot().forward.normalized * AnkleToFootCenterDistance;
 					DesiredLeftAnklePos.y += AnkleHeight;
 					int MinRightDistancePointIndex = 0;
 					float MinRightDistance = float.PositiveInfinity;
-					Vector3 DesiredRightAnklePos = RightGoalPosition + (-1f) * Actor.GetRoot().forward.normalized * AnkleToFootCenterDistance;
+					DesiredRightAnklePos = RightGoalPosition + (-1f) * Actor.GetRoot().forward.normalized * AnkleToFootCenterDistance;
 					DesiredRightAnklePos.y += AnkleHeight;
 
-					float Multiplier = 1f / (TimeSeries.KeyCount - TimeSeries.PivotKey + 1);
+					float Multiplier = (1f / (TimeSeries.KeyCount - TimeSeries.PivotKey));
 
+					// Getting index of points in trajectory closest to the targets
 					for(int i=TimeSeries.PivotKey; i<TimeSeries.KeyCount; i++){
 						TimeSeries.Sample sample2 = TimeSeries.GetKey(i);
 						Vector3 LeftTrajectoryPos = FeetSeries.GetLeftFootPosition(sample2.Index);
@@ -723,9 +757,10 @@ public class StairWalking : NeuralAnimation {
 						for(int i=TimeSeries.PivotKey; i<TimeSeries.KeyCount; i++){
 							TimeSeries.Sample sample4 = TimeSeries.GetKey(i);
 							Vector3 OffsetLeftPosition = FeetSeries.GetLeftFootPosition(sample4.Index) + LeftOffsetVector;
-							Debug.DrawLine(FeetSeries.GetLeftFootPosition(sample4.Index), OffsetLeftPosition, Color.yellow, 1f);
+							//Debug.DrawLine(FeetSeries.GetLeftFootPosition(sample4.Index), OffsetLeftPosition, Color.yellow, 1f);
 							float Weight = Mathf.Abs(MinLeftDistancePointIndex - i);
 							FeetSeries.SetLeftFootPosition(sample4.Index, FeetSeries.GetLeftFootPosition(sample4.Index) + (1f - Multiplier * Weight) * LeftOffsetVector); // 
+							//FeetSeries.SetLeftFootPosition(sample4.Index, Vector3.Slerp(FeetSeries.GetLeftFootPosition(sample4.Index), DesiredLeftAnklePos, 1f - Multiplier * Weight));
 						}
 					}
 
@@ -742,9 +777,10 @@ public class StairWalking : NeuralAnimation {
 						for(int i=TimeSeries.PivotKey; i<TimeSeries.KeyCount; i++){
 							TimeSeries.Sample sample4 = TimeSeries.GetKey(i);
 							Vector3 OffsetRightPosition = FeetSeries.GetRightFootPosition(sample4.Index) + RightOffsetVector;
-							Debug.DrawLine(FeetSeries.GetRightFootPosition(sample4.Index), OffsetRightPosition, Color.yellow, 1f);
+							//Debug.DrawLine(FeetSeries.GetRightFootPosition(sample4.Index), OffsetRightPosition, Color.yellow, 1f);
 							float Weight = Mathf.Abs(MinRightDistancePointIndex - i);
-							FeetSeries.SetRightFootPosition(sample4.Index, FeetSeries.GetRightFootPosition(sample4.Index) + (1f - Multiplier * Weight) * RightOffsetVector);// 
+							FeetSeries.SetRightFootPosition(sample4.Index, FeetSeries.GetRightFootPosition(sample4.Index) + (1f - Multiplier * Weight) * RightOffsetVector);//
+							//FeetSeries.SetRightFootPosition(sample4.Index, Vector3.Slerp(FeetSeries.GetRightFootPosition(sample4.Index), DesiredRightAnklePos, (1f - Multiplier * Weight) * 0.1f)); 
 						}
 					}
 
@@ -814,38 +850,65 @@ public class StairWalking : NeuralAnimation {
 		transform.position = RootSeries.GetPosition(TimeSeries.Pivot);
 		transform.rotation = RootSeries.GetRotation(TimeSeries.Pivot);
 		for(int i=0; i<Actor.Bones.Length; i++) {
-			/*if(Actor.Bones[i].GetName() == "LeftAnkle"){
-				Actor.Bones[i].Transform.position = FeetSeries.LeftFootTransformations[TimeSeries.Pivot].GetPosition(); 
-			}else if(Actor.Bones[i].GetName() == "RightAnkle"){
-				Actor.Bones[i].Transform.position = FeetSeries.RightFootTransformations[TimeSeries.Pivot].GetPosition();
+			// Blend feet trajectory pivot positions with current feet bone positions
+			if((Actor.Bones[i].GetName() == "LeftAnkle" || Actor.Bones[i].GetName() == "RightAnkle") && UseSteps && CorrectAnklePosition){
+				if(Actor.Bones[i].GetName() == "LeftAnkle"){
+					float LeftDistance = Vector3.Distance(DesiredLeftAnklePos, Actor.Bones[i].Transform.position);
+					if(LeftDistance < 1f && velocities[i].magnitude > 0.75f){
+						Actor.Bones[i].Transform.position = Vector3.Slerp(positions[i], FeetSeries.LeftFootTransformations[TimeSeries.Pivot].GetPosition(), 
+															Mathf.Exp(-AnkleCorrectionWeight*LeftDistance));
+					}else{
+						Actor.Bones[i].Transform.position = positions[i];
+					}
+					Actor.Bones[i].Velocity = velocities[i];
+					//Debug.Log("Left Velocity = " + velocities[i].magnitude);
+					//Actor.Bones[i].Transform.position = positions[i];
+					Actor.Bones[i].Transform.rotation = Quaternion.LookRotation(forwards[i], upwards[i]);
+					Actor.Bones[i].ApplyLength(); 
+				}else if(Actor.Bones[i].GetName() == "RightAnkle"){
+					float RightDistance = Vector3.Distance(DesiredRightAnklePos, Actor.Bones[i].Transform.position);
+					if(RightDistance < 1f && velocities[i].magnitude > 0.75f){
+						Actor.Bones[i].Transform.position = Vector3.Slerp(positions[i], FeetSeries.RightFootTransformations[TimeSeries.Pivot].GetPosition(), 
+															Mathf.Exp(-AnkleCorrectionWeight*RightDistance));
+					}else{
+						Actor.Bones[i].Transform.position = positions[i];
+					}
+					Actor.Bones[i].Velocity = velocities[i];
+					//Actor.Bones[i].Transform.position = positions[i];
+					Actor.Bones[i].Transform.rotation = Quaternion.LookRotation(forwards[i], upwards[i]);
+					Actor.Bones[i].ApplyLength();
+				}
 			}else{
+				Actor.Bones[i].Velocity = velocities[i];
 				Actor.Bones[i].Transform.position = positions[i];
-			}*/
-			Actor.Bones[i].Velocity = velocities[i];
-			Actor.Bones[i].Transform.position = positions[i];
-			Actor.Bones[i].Transform.rotation = Quaternion.LookRotation(forwards[i], upwards[i]);
-			Actor.Bones[i].ApplyLength();
+				Actor.Bones[i].Transform.rotation = Quaternion.LookRotation(forwards[i], upwards[i]);
+				Actor.Bones[i].ApplyLength();
+			}
 		}
 
 		// Setting Ankle position estimation to the actor. Also correcting Toe position by offset
-		if(UseSteps){
+		/*if(UseSteps){
 			if(CorrectAnklePosition){
 				float ankleVelThres = 0.8f;
-				Actor.FindBone("LeftAnkle").Transform.position = FeetSeries.LeftFootTransformations[TimeSeries.Pivot].GetPosition();
+				//Actor.FindBone("LeftAnkle").Transform.position = FeetSeries.LeftFootTransformations[TimeSeries.Pivot].GetPosition();
+				Actor.FindBone("LeftAnkle").Transform.position += (0.5f) * (FeetSeries.LeftFootTransformations[TimeSeries.Pivot].GetPosition() - 
+																	Actor.FindBone("LeftAnkle").Transform.position);
 				if(Actor.GetBoneVelocity("LeftAnkle").magnitude < ankleVelThres){
 					Actor.FindBone("LeftToe").Transform.position = Actor.FindBone("LeftToe").Transform.position + (-1f) * Actor.FindBone("Hips").Transform.up * 0.06f;
 				}
 				//Debug.Log("Foot height = " + FeetSeries.LeftFootTransformations[TimeSeries.Pivot].GetPosition().y);
 				//Actor.FindBone("LeftToe").Transform.position = LeftToePos;
 				//Actor.FindBone("LeftAnkle").Transform.rotation = FeetSeries.LeftFootTransformations[TimeSeries.Pivot].GetRotation();
-				Actor.FindBone("RightAnkle").Transform.position = FeetSeries.RightFootTransformations[TimeSeries.Pivot].GetPosition();
+				//Actor.FindBone("RightAnkle").Transform.position = FeetSeries.RightFootTransformations[TimeSeries.Pivot].GetPosition();
+				Actor.FindBone("RightAnkle").Transform.position += (0.5f) * (FeetSeries.RightFootTransformations[TimeSeries.Pivot].GetPosition() - 
+																	Actor.FindBone("RightAnkle").Transform.position);
 				if(Actor.GetBoneVelocity("RightAnkle").magnitude < ankleVelThres){
 					Actor.FindBone("RightToe").Transform.position = Actor.FindBone("RightToe").Transform.position + (-1f) * Actor.FindBone("Hips").Transform.up * 0.06f;
 				}
 				//Actor.FindBone("RightAnkle").Transform.position = RightToePos; 
 				//Actor.FindBone("RightAnkle").Transform.rotation = FeetSeries.RightFootTransformations[TimeSeries.Pivot].GetRotation();
 			}
-		}
+		}*/
 		
 		//FeetSeries.SetLeftFootTransformation(TimeSeries.Pivot, Actor.GetBoneTransformation("LeftAnkle"));
 		//FeetSeries.SetRightFootTransformation(TimeSeries.Pivot, Actor.GetBoneTransformation("RightAnkle"));
@@ -877,7 +940,7 @@ public class StairWalking : NeuralAnimation {
 	
 	private Vector3 ClipGoalLength(Vector3 goalPoint, float distanceToPlane, ref bool goalClipped){
 		Vector3 rootPos = Actor.GetRoot().position;
-		if(distanceToPlane < 0f){
+		if(distanceToPlane < 0f && CharacterMoving()){
 			goalClipped = true;
 			goalPoint += (distanceToPlane) * Actor.GetRoot().forward.normalized;
 			goalPoint.y = Utility.GetHeight(goalPoint, LayerMask.GetMask("Ground","Interaction"));			
@@ -978,14 +1041,14 @@ public class StairWalking : NeuralAnimation {
 		goalPointMovedUp.y += 1;
 		RaycastHit hitRay;
 		Physics.Raycast(goalPointMovedUp, Vector3.down, out hitRay, float.PositiveInfinity, LayerMask.GetMask("Ground","Interaction"));
-		//Plane treadCenterPlane = new Plane(hitRay.transform.right, hitRay.transform.position);
-		//DrawPlane(hitRay.transform.position, hitRay.transform.right, Color.green);
+		Plane treadCenterPlane = new Plane(hitRay.transform.forward, hitRay.transform.position);
+		DrawPlane(hitRay.transform.position, hitRay.transform.forward, Color.green);
 		if( hitRay.transform.tag == "Tread" && CharacterMoving()){
-			Plane treadCenterPlane = new Plane(hitRay.transform.right, hitRay.transform.position);
+			treadCenterPlane = new Plane(hitRay.transform.forward, hitRay.transform.position);
 			//DrawPlane(hitRay.transform.position, hitRay.transform.right, Color.green);
 			//Computing distance as follows: d = (p0 - l0)*n / (l*n) ; Source: https://en.wikipedia.org/wiki/Line%E2%80%93plane_intersection
-			float d = Vector3.Dot(hitRay.transform.position - vectorOrigin, hitRay.transform.right) / 
-			          Vector3.Dot(Actor.GetRoot().forward.normalized, hitRay.transform.right);
+			float d = Vector3.Dot(hitRay.transform.position - vectorOrigin, hitRay.transform.forward) / 
+			          Vector3.Dot(Actor.GetRoot().forward.normalized, hitRay.transform.forward);
 			if(d > 2f || d < 0f){
 				resetCycle();
 				return goalPoint;
@@ -1053,7 +1116,7 @@ public class StairWalking : NeuralAnimation {
 				Controller.QueryTurn(Turns[0], Turns[1], 90f), 
 				Signals,
 				Quaternion.LookRotation(targetDir, Vector3.up) * Vector3.ProjectOnPlane(root.GetForward(), Vector3.up).normalized
-			);	
+				);	
 			}else{
 				ApplyDynamicGoal(
 				RootSeries.Transformations[TimeSeries.Pivot],
@@ -1220,6 +1283,7 @@ public class StairWalking : NeuralAnimation {
 		//Transformations
 		for(int i=0; i<TimeSeries.Samples.Length; i++) {
 			float weight = TimeSeries.GetWeight1byN1(i, 2f);
+			UserControl = 1f;
 			float positionBlending = weight * UserControl;
 			float directionBlending = weight * UserControl;
 			Matrix4x4Extensions.SetPosition(ref GoalSeries.Transformations[i], Vector3.Lerp(GoalSeries.Transformations[i].GetPosition(), position, positionBlending));
@@ -1313,7 +1377,8 @@ public class StairWalking : NeuralAnimation {
 
 	private bool CharacterMoving(){
 		if(Controller.QueryMove(KeyCode.W, KeyCode.S, KeyCode.A, KeyCode.D, Signals) != Vector3.zero || 
-		(activeSpline && Controller.QueryMove(Signals) != Vector3.zero)){
+		(activeSpline && Controller.QueryMove(Signals) != Vector3.zero) || 
+		GoalSeries.GetAction(TimeSeries.Pivot, "Idle") < 0.6f){
 			return true;
 		}
 		return false;
